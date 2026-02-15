@@ -1,0 +1,43 @@
+{
+  "id": "oc-token-optim",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "maxTokens": {
+        "type": "integer",
+        "minimum": 500,
+        "maximum": 500000
+      },
+      "maxChars": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 200000
+      },
+      "maxRetainedBytes": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 5000000
+      },
+      "tools": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxTokens": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 500000
+            },
+            "maxChars": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 200000
+            }
+          }
+        }
+      }
+    }
+  }
+}

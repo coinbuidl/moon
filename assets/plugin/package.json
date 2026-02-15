@@ -1,0 +1,8 @@
+{
+  "name": "oc-token-optim",
+  "version": "0.1.0",
+  "description": "Persist-time token-aware tool result compaction plugin",
+  "openclaw": {
+    "extensions": ["./index.js"]
+  }
+}

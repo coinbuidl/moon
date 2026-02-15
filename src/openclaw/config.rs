@@ -1,0 +1,462 @@
+use crate::openclaw::paths::{OpenClawPaths, ensure_parent_dir};
+use anyhow::{Context, Result};
+use serde_json::{Map, Value, json};
+use std::fs;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tempfile::NamedTempFile;
+
+#[derive(Debug, Clone, Default)]
+pub struct ConfigPatchOutcome {
+    pub changed: bool,
+    pub inserted_paths: Vec<String>,
+    pub forced_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigPatchOptions {
+    pub force: bool,
+}
+
+fn as_object_mut(value: &mut Value) -> Option<&mut Map<String, Value>> {
+    match value {
+        Value::Object(map) => Some(map),
+        _ => None,
+    }
+}
+
+fn parse_config_text(raw: &str) -> Result<Value> {
+    if raw.trim().is_empty() {
+        return Ok(json!({}));
+    }
+
+    match serde_json::from_str::<Value>(raw) {
+        Ok(v) => Ok(v),
+        Err(_) => json5::from_str::<Value>(raw).context("failed to parse config as JSON/JSON5"),
+    }
+}
+
+pub fn read_config_value(paths: &OpenClawPaths) -> Result<Value> {
+    if !paths.config_path.exists() {
+        return Ok(json!({}));
+    }
+    let raw = fs::read_to_string(&paths.config_path)
+        .with_context(|| format!("failed reading {}", paths.config_path.display()))?;
+    parse_config_text(&raw)
+}
+
+fn set_path_if_absent_or_forced(
+    root: &mut Value,
+    path: &[&str],
+    value: Value,
+    force: bool,
+    outcome: &mut ConfigPatchOutcome,
+) {
+    if path.is_empty() {
+        return;
+    }
+
+    let mut cursor = root;
+    for key in &path[..path.len() - 1] {
+        if !cursor.is_object() {
+            *cursor = Value::Object(Map::new());
+        }
+        let Some(map) = as_object_mut(cursor) else {
+            return;
+        };
+        cursor = map
+            .entry((*key).to_string())
+            .or_insert_with(|| Value::Object(Map::new()));
+    }
+
+    let leaf = path[path.len() - 1];
+    if !cursor.is_object() {
+        *cursor = Value::Object(Map::new());
+    }
+    let Some(map) = as_object_mut(cursor) else {
+        return;
+    };
+
+    if let Some(existing) = map.get(leaf) {
+        if force && existing != &value {
+            map.insert(leaf.to_string(), value);
+            outcome.changed = true;
+            outcome.forced_paths.push(path.join("."));
+        }
+        return;
+    }
+
+    map.insert(leaf.to_string(), value);
+    outcome.changed = true;
+    outcome.inserted_paths.push(path.join("."));
+}
+
+fn patch_channel_limits(root: &mut Value, force: bool, outcome: &mut ConfigPatchOutcome) {
+    let Some(channels) = root.get_mut("channels") else {
+        return;
+    };
+    let Some(channels_map) = channels.as_object_mut() else {
+        return;
+    };
+
+    for (provider, provider_cfg) in channels_map.iter_mut() {
+        let Some(provider_map) = provider_cfg.as_object_mut() else {
+            continue;
+        };
+
+        if !provider_map.contains_key("historyLimit") || force {
+            let existing = provider_map.get("historyLimit").cloned();
+            if existing.is_none() {
+                provider_map.insert("historyLimit".to_string(), Value::from(50));
+                outcome.changed = true;
+                outcome
+                    .inserted_paths
+                    .push(format!("channels.{provider}.historyLimit"));
+            } else if force && existing != Some(Value::from(50)) {
+                provider_map.insert("historyLimit".to_string(), Value::from(50));
+                outcome.changed = true;
+                outcome
+                    .forced_paths
+                    .push(format!("channels.{provider}.historyLimit"));
+            }
+        }
+
+        if !provider_map.contains_key("dmHistoryLimit") || force {
+            let existing = provider_map.get("dmHistoryLimit").cloned();
+            if existing.is_none() {
+                provider_map.insert("dmHistoryLimit".to_string(), Value::from(30));
+                outcome.changed = true;
+                outcome
+                    .inserted_paths
+                    .push(format!("channels.{provider}.dmHistoryLimit"));
+            } else if force && existing != Some(Value::from(30)) {
+                provider_map.insert("dmHistoryLimit".to_string(), Value::from(30));
+                outcome.changed = true;
+                outcome
+                    .forced_paths
+                    .push(format!("channels.{provider}.dmHistoryLimit"));
+            }
+        }
+    }
+}
+
+fn patch_plugin_token_defaults(
+    root: &mut Value,
+    plugin_id: &str,
+    force: bool,
+    outcome: &mut ConfigPatchOutcome,
+) {
+    set_path_if_absent_or_forced(
+        root,
+        &["plugins", "entries", plugin_id, "config", "maxTokens"],
+        Value::from(12_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &["plugins", "entries", plugin_id, "config", "maxChars"],
+        Value::from(60_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "maxRetainedBytes",
+        ],
+        Value::from(250_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "read",
+            "maxTokens",
+        ],
+        Value::from(6_000),
+        force,
+        outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins", "entries", plugin_id, "config", "tools", "read", "maxChars",
+        ],
+        Value::from(32_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "message/readMessages",
+            "maxTokens",
+        ],
+        Value::from(5_000),
+        force,
+        outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "message/readMessages",
+            "maxChars",
+        ],
+        Value::from(28_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "message/searchMessages",
+            "maxTokens",
+        ],
+        Value::from(5_000),
+        force,
+        outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "message/searchMessages",
+            "maxChars",
+        ],
+        Value::from(28_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "web_fetch",
+            "maxTokens",
+        ],
+        Value::from(7_000),
+        force,
+        outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "web_fetch",
+            "maxChars",
+        ],
+        Value::from(35_000),
+        force,
+        outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "web.fetch",
+            "maxTokens",
+        ],
+        Value::from(7_000),
+        force,
+        outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "plugins",
+            "entries",
+            plugin_id,
+            "config",
+            "tools",
+            "web.fetch",
+            "maxChars",
+        ],
+        Value::from(35_000),
+        force,
+        outcome,
+    );
+}
+
+pub fn apply_config_patches(
+    root: &mut Value,
+    opts: &ConfigPatchOptions,
+    plugin_id: &str,
+) -> ConfigPatchOutcome {
+    if !root.is_object() {
+        *root = json!({});
+    }
+
+    let mut outcome = ConfigPatchOutcome::default();
+
+    set_path_if_absent_or_forced(
+        root,
+        &["agents", "defaults", "compaction", "reserveTokensFloor"],
+        Value::from(24_000),
+        opts.force,
+        &mut outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &["agents", "defaults", "compaction", "maxHistoryShare"],
+        Value::from(0.6),
+        opts.force,
+        &mut outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &["agents", "defaults", "contextPruning", "mode"],
+        Value::from("cache-ttl"),
+        opts.force,
+        &mut outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "agents",
+            "defaults",
+            "contextPruning",
+            "softTrim",
+            "maxChars",
+        ],
+        Value::from(4000),
+        opts.force,
+        &mut outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "agents",
+            "defaults",
+            "contextPruning",
+            "softTrim",
+            "headChars",
+        ],
+        Value::from(1500),
+        opts.force,
+        &mut outcome,
+    );
+
+    set_path_if_absent_or_forced(
+        root,
+        &[
+            "agents",
+            "defaults",
+            "contextPruning",
+            "softTrim",
+            "tailChars",
+        ],
+        Value::from(1500),
+        opts.force,
+        &mut outcome,
+    );
+
+    patch_channel_limits(root, opts.force, &mut outcome);
+    patch_plugin_token_defaults(root, plugin_id, opts.force, &mut outcome);
+
+    outcome
+}
+
+pub fn ensure_plugin_enabled(root: &mut Value, plugin_id: &str) -> ConfigPatchOutcome {
+    let mut outcome = ConfigPatchOutcome::default();
+
+    set_path_if_absent_or_forced(
+        root,
+        &["plugins", "entries", plugin_id, "enabled"],
+        Value::Bool(true),
+        true,
+        &mut outcome,
+    );
+
+    outcome
+}
+
+fn backup_path(config_path: &Path) -> Result<String> {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("clock before unix epoch")?
+        .as_secs();
+    Ok(format!("{}.bak.{ts}", config_path.display()))
+}
+
+pub fn write_config_atomic(paths: &OpenClawPaths, value: &Value) -> Result<String> {
+    ensure_parent_dir(&paths.config_path)?;
+
+    if paths.config_path.exists() {
+        let backup = backup_path(&paths.config_path)?;
+        fs::copy(&paths.config_path, &backup).with_context(|| {
+            format!(
+                "failed backing up config {} -> {}",
+                paths.config_path.display(),
+                backup
+            )
+        })?;
+    }
+
+    let parent = paths
+        .config_path
+        .parent()
+        .context("config path has no parent")?;
+    let mut temp = NamedTempFile::new_in(parent)?;
+    serde_json::to_writer_pretty(&mut temp, value)?;
+    use std::io::Write;
+    temp.write_all(b"\n")?;
+    temp.flush()?;
+
+    temp.persist(&paths.config_path)
+        .map_err(|e| anyhow::anyhow!("failed persisting config atomically: {}", e.error))?;
+
+    Ok(paths.config_path.display().to_string())
+}
