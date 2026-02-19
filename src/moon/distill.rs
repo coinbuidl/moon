@@ -1,12 +1,13 @@
 use crate::moon::audit;
 use crate::moon::paths::MoonPaths;
 use anyhow::{Context, Result};
-use chrono::{Datelike, Local};
+use chrono::{Datelike, Local, TimeZone};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone)]
@@ -14,6 +15,7 @@ pub struct DistillInput {
     pub session_id: String,
     pub archive_path: String,
     pub archive_text: String,
+    pub archive_epoch_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +86,9 @@ const MAX_PROMPT_LINES: usize = 80;
 const MAX_MODEL_LINES: usize = 80;
 const MIN_MODEL_BULLETS: usize = 3;
 const REQUEST_TIMEOUT_SECS: u64 = 45;
+const MAX_ARCHIVE_SCAN_BYTES: usize = 4 * 1024 * 1024;
+const MAX_ARCHIVE_SCAN_LINES: usize = 50_000;
+const MAX_ARCHIVE_CANDIDATES: usize = 400;
 
 fn env_non_empty(var: &str) -> Option<String> {
     match env::var(var) {
@@ -104,10 +109,10 @@ fn parse_provider_alias(raw: &str) -> Option<RemoteProvider> {
 
 fn parse_prefixed_model(raw: &str) -> (Option<RemoteProvider>, String) {
     let trimmed = raw.trim();
-    if let Some((prefix, model)) = trimmed.split_once(':') {
-        if let Some(provider) = parse_provider_alias(prefix) {
-            return (Some(provider), model.trim().to_string());
-        }
+    if let Some((prefix, model)) = trimmed.split_once(':')
+        && let Some(provider) = parse_provider_alias(prefix)
+    {
+        return (Some(provider), model.trim().to_string());
     }
     (None, trimmed.to_string())
 }
@@ -323,22 +328,28 @@ fn push_message_candidates(entry: &Value, out: &mut Vec<String>) {
     }
 }
 
+fn push_candidate_from_line(trimmed: &str, out: &mut Vec<String>) {
+    if trimmed.is_empty() {
+        return;
+    }
+
+    if let Ok(entry) = serde_json::from_str::<Value>(trimmed) {
+        push_message_candidates(&entry, out);
+        return;
+    }
+
+    if !looks_like_json_blob(trimmed)
+        && let Some(cleaned) = clean_candidate_text(trimmed)
+    {
+        out.push(cleaned);
+    }
+}
+
 fn extract_candidate_lines(raw: &str) -> Vec<String> {
     let mut out = Vec::new();
 
     for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        if let Ok(entry) = serde_json::from_str::<Value>(trimmed) {
-            push_message_candidates(&entry, &mut out);
-        } else if !looks_like_json_blob(trimmed) {
-            if let Some(cleaned) = clean_candidate_text(trimmed) {
-                out.push(cleaned);
-            }
-        }
+        push_candidate_from_line(line.trim(), &mut out);
 
         if out.len() >= 200 {
             break;
@@ -346,6 +357,43 @@ fn extract_candidate_lines(raw: &str) -> Vec<String> {
     }
 
     out
+}
+
+pub fn load_archive_excerpt(path: &str) -> Result<String> {
+    let file = fs::File::open(path).with_context(|| format!("failed to open {path}"))?;
+    let reader = BufReader::new(file);
+
+    let mut scanned_bytes = 0usize;
+    let mut scanned_lines = 0usize;
+    let mut out = Vec::new();
+    let mut truncated = false;
+
+    for line in reader.split(b'\n') {
+        let raw = line.with_context(|| format!("failed to read line from {path}"))?;
+        scanned_lines = scanned_lines.saturating_add(1);
+        scanned_bytes = scanned_bytes.saturating_add(raw.len().saturating_add(1));
+
+        let decoded = String::from_utf8_lossy(&raw);
+        push_candidate_from_line(decoded.trim(), &mut out);
+
+        if out.len() >= MAX_ARCHIVE_CANDIDATES
+            || scanned_lines >= MAX_ARCHIVE_SCAN_LINES
+            || scanned_bytes >= MAX_ARCHIVE_SCAN_BYTES
+        {
+            truncated = true;
+            break;
+        }
+    }
+
+    if out.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut excerpt = out.join("\n");
+    if truncated {
+        excerpt.push_str("\n[archive excerpt truncated]");
+    }
+    Ok(excerpt)
 }
 
 fn is_signal_line(line: &str) -> bool {
@@ -670,9 +718,16 @@ impl Distiller for AnthropicDistiller {
     }
 }
 
-fn daily_memory_path(paths: &MoonPaths) -> String {
-    let now = Local::now();
-    let date = format!("{:04}-{:02}-{:02}", now.year(), now.month(), now.day());
+fn daily_memory_path(paths: &MoonPaths, archive_epoch_secs: Option<u64>) -> String {
+    let timestamp = archive_epoch_secs
+        .and_then(|secs| Local.timestamp_opt(secs as i64, 0).single())
+        .unwrap_or_else(Local::now);
+    let date = format!(
+        "{:04}-{:02}-{:02}",
+        timestamp.year(),
+        timestamp.month(),
+        timestamp.day()
+    );
     paths
         .memory_dir
         .join(format!("{}.md", date))
@@ -726,7 +781,7 @@ pub fn run_distillation(paths: &MoonPaths, input: &DistillInput) -> Result<Disti
     };
     let summary = clamp_summary(&generated_summary);
 
-    let summary_path = daily_memory_path(paths);
+    let summary_path = daily_memory_path(paths, input.archive_epoch_secs);
     let mut text = String::new();
     text.push_str(&format!("\n\n### {}\n", input.session_id));
     text.push_str(&summary);
@@ -777,6 +832,7 @@ mod tests {
                 "{{\"type\":\"message\",\"message\":{{\"role\":\"toolResult\",\"content\":[{{\"type\":\"text\",\"text\":\"{{\\\"payload\\\":\\\"{}\\\"}}\"}}]}}}}\n{{\"type\":\"message\",\"message\":{{\"role\":\"user\",\"content\":[{{\"type\":\"text\",\"text\":\"Decision: set qmd mask to jsonl for archive indexing.\"}}]}}}}\n",
                 "X".repeat(4096)
             ),
+            archive_epoch_secs: None,
         };
 
         let summary = LocalDistiller
