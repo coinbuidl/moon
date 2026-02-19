@@ -21,10 +21,13 @@ use crate::moon::thresholds::{TriggerKind, evaluate};
 use crate::openclaw::gateway;
 use anyhow::{Context, Result};
 use chrono::{Local, TimeZone};
+use fs2::FileExt;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -217,6 +220,43 @@ fn day_key_for_epoch(epoch_secs: u64) -> String {
         .single()
         .map(|dt| dt.format("%Y-%m-%d").to_string())
         .unwrap_or_else(|| "1970-01-01".to_string())
+}
+
+fn acquire_daemon_lock() -> Result<File> {
+    let paths = resolve_paths()?;
+    fs::create_dir_all(&paths.logs_dir)
+        .with_context(|| format!("failed to create {}", paths.logs_dir.display()))?;
+
+    let lock_path = paths.logs_dir.join("moon-watch.daemon.lock");
+    let mut lock_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .with_context(|| format!("failed to open daemon lock {}", lock_path.display()))?;
+
+    match lock_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == ErrorKind::WouldBlock => {
+            anyhow::bail!(
+                "moon watcher daemon already running (lock: {})",
+                lock_path.display()
+            );
+        }
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to lock daemon file {}", lock_path.display()));
+        }
+    }
+
+    lock_file
+        .set_len(0)
+        .with_context(|| format!("failed to truncate daemon lock {}", lock_path.display()))?;
+    writeln!(&mut lock_file, "{}", std::process::id())
+        .with_context(|| format!("failed to write daemon lock {}", lock_path.display()))?;
+
+    Ok(lock_file)
 }
 
 fn extract_key_decisions(summary: &str) -> Vec<String> {
@@ -945,6 +985,7 @@ pub fn run_once() -> Result<WatchCycleOutcome> {
 }
 
 pub fn run_daemon() -> Result<()> {
+    let _daemon_lock = acquire_daemon_lock()?;
     let mut consecutive_failures = 0u32;
     loop {
         match run_once() {
