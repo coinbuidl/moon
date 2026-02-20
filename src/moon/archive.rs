@@ -1,7 +1,7 @@
 use crate::moon::paths::MoonPaths;
 use crate::moon::qmd;
 use crate::moon::snapshot::write_snapshot;
-use crate::moon::warn;
+use crate::moon::warn::{self, WarnEvent};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -145,20 +145,20 @@ pub fn archive_and_index(
         qmd::collection_add_or_update(&paths.qmd_bin, &paths.archives_dir, collection_name)
     {
         indexed = false;
-        warn::emit(
-            "INDEX_FAILED",
-            "qmd-index",
-            "archive-index",
-            source
+        warn::emit(WarnEvent {
+            code: "INDEX_FAILED",
+            stage: "qmd-index",
+            action: "archive-index",
+            session: source
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("session"),
-            &write.archive_path.display().to_string(),
-            &write.source_path.display().to_string(),
-            "retry-next-cycle",
-            "qmd-collection-add-or-update-failed",
-            &format!("{err:#}"),
-        );
+            archive: &write.archive_path.display().to_string(),
+            source: &write.source_path.display().to_string(),
+            retry: "retry-next-cycle",
+            reason: "qmd-collection-add-or-update-failed",
+            err: &format!("{err:#}"),
+        });
         eprintln!("moon archive index warning: {err}");
     }
 

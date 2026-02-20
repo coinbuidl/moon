@@ -401,7 +401,11 @@ fn moon_watch_once_emits_ai_warning_when_ledger_is_invalid() {
     fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
     fs::create_dir_all(moon_home.join("skills/moon-system/logs")).expect("mkdir logs");
     fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
-    fs::write(sessions_dir.join("s1.json"), "{\"decision\":\"bad ledger\"}\n").expect("session");
+    fs::write(
+        sessions_dir.join("s1.json"),
+        "{\"decision\":\"bad ledger\"}\n",
+    )
+    .expect("session");
     fs::write(moon_home.join("archives/ledger.jsonl"), "not-jsonl\n").expect("ledger");
 
     let qmd = tmp.path().join("qmd");

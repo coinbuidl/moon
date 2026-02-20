@@ -18,7 +18,7 @@ use crate::moon::session_usage::{
 use crate::moon::snapshot::latest_session_file;
 use crate::moon::state::{load, save};
 use crate::moon::thresholds::{TriggerKind, evaluate};
-use crate::moon::warn;
+use crate::moon::warn::{self, WarnEvent};
 use crate::openclaw::gateway;
 use anyhow::{Context, Result};
 use chrono::{Local, TimeZone};
@@ -181,17 +181,17 @@ fn cleanup_expired_distilled_archives(
     let ledger = match read_ledger_records(paths) {
         Ok(records) => records,
         Err(err) => {
-            warn::emit(
-                "LEDGER_READ_FAILED",
-                "archive-retention",
-                "read-ledger",
-                "na",
-                "na",
-                "na",
-                "retry-next-cycle",
-                "ledger-read-failed",
-                &format!("{err:#}"),
-            );
+            warn::emit(WarnEvent {
+                code: "LEDGER_READ_FAILED",
+                stage: "archive-retention",
+                action: "read-ledger",
+                session: "na",
+                archive: "na",
+                source: "na",
+                retry: "retry-next-cycle",
+                reason: "ledger-read-failed",
+                err: &format!("{err:#}"),
+            });
             return Ok(Some(format!(
                 "retention_active_days={} retention_warm_days={} retention_cold_days={} removed=0 missing=0 failed=1 map_removed=0 ledger_removed=0 qmd_updated=false reason=ledger-read-failed",
                 retention.active_days, retention.warm_days, retention.cold_days
@@ -220,17 +220,17 @@ fn cleanup_expired_distilled_archives(
 
     for (archive_path, distilled_at) in candidates {
         let Some(created_at) = ledger_by_archive.get(&archive_path).copied() else {
-            warn::emit(
-                "LEDGER_READ_FAILED",
-                "archive-retention",
-                "lookup-ledger-record",
-                "na",
-                &archive_path,
-                "na",
-                "skip-current-archive",
-                "archive-path-missing-in-ledger",
-                "missing-ledger-record",
-            );
+            warn::emit(WarnEvent {
+                code: "LEDGER_READ_FAILED",
+                stage: "archive-retention",
+                action: "lookup-ledger-record",
+                session: "na",
+                archive: &archive_path,
+                source: "na",
+                retry: "skip-current-archive",
+                reason: "archive-path-missing-in-ledger",
+                err: "missing-ledger-record",
+            });
             continue;
         };
 
@@ -260,17 +260,17 @@ fn cleanup_expired_distilled_archives(
                 }
                 Err(err) => {
                     failed += 1;
-                    warn::emit(
-                        "RETENTION_DELETE_FAILED",
-                        "archive-retention",
-                        "delete-archive",
-                        "na",
-                        &archive_path,
-                        "na",
-                        "retry-next-cycle",
-                        "remove-file-failed",
-                        &format!("{err:#}"),
-                    );
+                    warn::emit(WarnEvent {
+                        code: "RETENTION_DELETE_FAILED",
+                        stage: "archive-retention",
+                        action: "delete-archive",
+                        session: "na",
+                        archive: &archive_path,
+                        source: "na",
+                        retry: "retry-next-cycle",
+                        reason: "remove-file-failed",
+                        err: &format!("{err:#}"),
+                    });
                 }
             }
         } else {
@@ -796,17 +796,17 @@ pub fn run_once() -> Result<WatchCycleOutcome> {
                     }
                 }
                 Err(err) => {
-                    warn::emit(
-                        "LEDGER_READ_FAILED",
-                        "distill-selection",
-                        "read-ledger",
-                        "na",
-                        "na",
-                        "na",
-                        "retry-next-cycle",
-                        "ledger-read-failed",
-                        &format!("{err:#}"),
-                    );
+                    warn::emit(WarnEvent {
+                        code: "LEDGER_READ_FAILED",
+                        stage: "distill-selection",
+                        action: "read-ledger",
+                        session: "na",
+                        archive: "na",
+                        source: "na",
+                        retry: "retry-next-cycle",
+                        reason: "ledger-read-failed",
+                        err: &format!("{err:#}"),
+                    });
                     distill_notes.push(format!("skipped reason=ledger-read-failed error={err:#}"))
                 }
             }
@@ -917,17 +917,17 @@ pub fn run_once() -> Result<WatchCycleOutcome> {
                                 continuity_out = Some(outcome);
                             }
                             Err(err) => {
-                                warn::emit(
-                                    "CONTINUITY_FAILED",
-                                    "continuity",
-                                    "build-continuity",
-                                    &record.session_id,
-                                    &record.archive_path,
-                                    &record.source_path,
-                                    "retry-next-cycle",
-                                    "continuity-build-failed",
-                                    &format!("{err:#}"),
-                                );
+                                warn::emit(WarnEvent {
+                                    code: "CONTINUITY_FAILED",
+                                    stage: "continuity",
+                                    action: "build-continuity",
+                                    session: &record.session_id,
+                                    archive: &record.archive_path,
+                                    source: &record.source_path,
+                                    retry: "retry-next-cycle",
+                                    reason: "continuity-build-failed",
+                                    err: &format!("{err:#}"),
+                                });
                                 audit::append_event(
                                     &paths,
                                     "continuity",
@@ -942,17 +942,17 @@ pub fn run_once() -> Result<WatchCycleOutcome> {
                         distill_out = Some(distill);
                     }
                     Err(err) => {
-                        warn::emit(
-                            "DISTILL_CHUNKED_FAILED",
-                            "distill",
-                            "chunked-distill",
-                            &record.session_id,
-                            &record.archive_path,
-                            &record.source_path,
-                            "retry-next-cycle",
-                            "chunked-distillation-failed",
-                            &format!("{err:#}"),
-                        );
+                        warn::emit(WarnEvent {
+                            code: "DISTILL_CHUNKED_FAILED",
+                            stage: "distill",
+                            action: "chunked-distill",
+                            session: &record.session_id,
+                            archive: &record.archive_path,
+                            source: &record.source_path,
+                            retry: "retry-next-cycle",
+                            reason: "chunked-distillation-failed",
+                            err: &format!("{err:#}"),
+                        });
                         audit::append_event(
                             &paths,
                             "distill",
@@ -1041,17 +1041,17 @@ pub fn run_once() -> Result<WatchCycleOutcome> {
                             continuity_out = Some(outcome);
                         }
                         Err(err) => {
-                            warn::emit(
-                                "CONTINUITY_FAILED",
-                                "continuity",
-                                "build-continuity",
-                                &record.session_id,
-                                &record.archive_path,
-                                &record.source_path,
-                                "retry-next-cycle",
-                                "continuity-build-failed",
-                                &format!("{err:#}"),
-                            );
+                            warn::emit(WarnEvent {
+                                code: "CONTINUITY_FAILED",
+                                stage: "continuity",
+                                action: "build-continuity",
+                                session: &record.session_id,
+                                archive: &record.archive_path,
+                                source: &record.source_path,
+                                retry: "retry-next-cycle",
+                                reason: "continuity-build-failed",
+                                err: &format!("{err:#}"),
+                            });
                             audit::append_event(
                                 &paths,
                                 "continuity",
@@ -1066,17 +1066,17 @@ pub fn run_once() -> Result<WatchCycleOutcome> {
                     distill_out = Some(distill);
                 }
                 Err(err) => {
-                    warn::emit(
-                        "DISTILL_FAILED",
-                        "distill",
-                        "run-distill",
-                        &record.session_id,
-                        &record.archive_path,
-                        &record.source_path,
-                        "retry-next-cycle",
-                        "distillation-failed",
-                        &format!("{err:#}"),
-                    );
+                    warn::emit(WarnEvent {
+                        code: "DISTILL_FAILED",
+                        stage: "distill",
+                        action: "run-distill",
+                        session: &record.session_id,
+                        archive: &record.archive_path,
+                        source: &record.source_path,
+                        retry: "retry-next-cycle",
+                        reason: "distillation-failed",
+                        err: &format!("{err:#}"),
+                    });
                     audit::append_event(
                         &paths,
                         "distill",

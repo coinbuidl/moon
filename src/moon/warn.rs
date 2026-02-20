@@ -20,28 +20,31 @@ fn sanitize_value(value: &str) -> String {
     }
 }
 
-pub fn emit(
-    code: &str,
-    stage: &str,
-    action: &str,
-    session: &str,
-    archive: &str,
-    source: &str,
-    retry: &str,
-    reason: &str,
-    err: &str,
-) {
+#[derive(Debug, Clone, Copy)]
+pub struct WarnEvent<'a> {
+    pub code: &'a str,
+    pub stage: &'a str,
+    pub action: &'a str,
+    pub session: &'a str,
+    pub archive: &'a str,
+    pub source: &'a str,
+    pub retry: &'a str,
+    pub reason: &'a str,
+    pub err: &'a str,
+}
+
+pub fn emit(event: WarnEvent<'_>) {
     eprintln!(
         "MOON_WARN code={} stage={} action={} session={} archive={} source={} retry={} reason={} err={}",
-        sanitize_value(code),
-        sanitize_value(stage),
-        sanitize_value(action),
-        sanitize_value(session),
-        sanitize_value(archive),
-        sanitize_value(source),
-        sanitize_value(retry),
-        sanitize_value(reason),
-        sanitize_value(err),
+        sanitize_value(event.code),
+        sanitize_value(event.stage),
+        sanitize_value(event.action),
+        sanitize_value(event.session),
+        sanitize_value(event.archive),
+        sanitize_value(event.source),
+        sanitize_value(event.retry),
+        sanitize_value(event.reason),
+        sanitize_value(event.err),
     );
 }
 
