@@ -95,7 +95,7 @@ fn moon_index_registers_history_collection() {
     let log_path = tmp.path().join("qmd.log");
     write_fake_qmd(&fake_qmd, &log_path);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_ARCHIVES_DIR", &archives_dir)
         .env("QMD_BIN", &fake_qmd)
@@ -121,7 +121,7 @@ fn moon_index_updates_when_collection_already_exists() {
     let log_path = tmp.path().join("qmd.log");
     write_fake_qmd_add_conflict_then_update(&fake_qmd, &log_path);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_ARCHIVES_DIR", &archives_dir)
         .env("QMD_BIN", &fake_qmd)
@@ -148,7 +148,7 @@ fn moon_index_recreates_collection_when_mask_mismatches() {
     let marker = tmp.path().join("first_add.marker");
     write_fake_qmd_add_conflict_then_recreate(&fake_qmd, &log_path, &marker);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_ARCHIVES_DIR", &archives_dir)
         .env("QMD_BIN", &fake_qmd)

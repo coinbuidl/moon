@@ -31,7 +31,7 @@ fn moon_recall_returns_matches() {
         r#"[{"path":"/tmp/a.json","snippet":"rule captured","score":0.8}]"#,
     );
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("QMD_BIN", &qmd)
@@ -71,7 +71,7 @@ fn moon_recall_prefers_exact_channel_archive_match() {
         r#"[{"path":"/tmp/semantic.json","snippet":"semantic recall","score":0.8}]"#,
     );
 
-    let assert = assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    let assert = assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("QMD_BIN", &qmd)

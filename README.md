@@ -167,10 +167,10 @@ cargo run -- moon-status
 
 ## CLI
 
-Binary name: `oc-token-optim`
+Binary name: `MOON`
 
-Note: repository branding is **M.O.O.N.**, but the CLI binary/plugin id remains
-`oc-token-optim` for compatibility with existing OpenClaw installs.
+Note: OpenClaw plugin id remains `oc-token-optim` for compatibility with
+existing installs, but the runtime CLI process name is now `MOON`.
 
 ```bash
 cargo run -- <command> [flags]

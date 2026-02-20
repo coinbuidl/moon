@@ -104,7 +104,7 @@ fn moon_watch_once_triggers_pipeline_with_low_thresholds() {
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -147,7 +147,7 @@ fn moon_watch_once_triggers_inbound_system_event_for_new_file() {
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -224,7 +224,7 @@ fn moon_watch_once_compacts_all_oversized_discord_and_whatsapp_sessions() {
         {"key":"agent:main:main","totalTokens":90000,"contextTokens":100000}
     ]}"#;
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -318,7 +318,7 @@ fn moon_watch_once_distills_oldest_pending_archive_day_first() {
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -405,7 +405,7 @@ fn moon_watch_once_distill_selection_skips_unindexed_missing_and_already_distill
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -451,7 +451,7 @@ fn moon_watch_once_emits_ai_warning_when_ledger_is_invalid() {
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -518,7 +518,7 @@ fn moon_watch_once_cleans_up_expired_distilled_archives_after_grace_period() {
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
@@ -592,7 +592,7 @@ fn moon_watch_once_retention_keeps_recent_cold_window_archives() {
     let openclaw = tmp.path().join("openclaw");
     write_fake_openclaw(&openclaw);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)

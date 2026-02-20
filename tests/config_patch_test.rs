@@ -42,7 +42,7 @@ fn patch_respects_existing_values_unless_forced() {
     let log_path = tmp.path().join("openclaw.log");
     write_fake_openclaw(&fake_openclaw, &log_path);
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("OPENCLAW_STATE_DIR", &state_dir)
         .env("OPENCLAW_CONFIG_PATH", &config_path)
@@ -82,7 +82,7 @@ fn patch_respects_existing_values_unless_forced() {
         Some(16_000)
     );
 
-    assert_cmd::cargo::cargo_bin_cmd!("oc-token-optim")
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
         .current_dir(tmp.path())
         .env("OPENCLAW_STATE_DIR", &state_dir)
         .env("OPENCLAW_CONFIG_PATH", &config_path)

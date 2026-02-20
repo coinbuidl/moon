@@ -9,6 +9,11 @@ homepage = "https://github.com/coinbuidl/moon-system"
 readme = "README.md"
 keywords = ["openclaw", "llm", "cli", "memory", "context"]
 categories = ["command-line-utilities"]
+default-run = "MOON"
+
+[[bin]]
+name = "MOON"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"

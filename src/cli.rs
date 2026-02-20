@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::commands;
 
 #[derive(Debug, Parser)]
-#[command(name = "oc-token-optim")]
+#[command(name = "MOON")]
 #[command(about = "OpenClaw context optimization installer/repair CLI")]
 pub struct Cli {
     #[arg(long, global = true)]

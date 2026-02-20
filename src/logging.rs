@@ -1,5 +1,5 @@
 #![allow(dead_code)]
 
 pub fn info(message: impl AsRef<str>) {
-    eprintln!("[oc-token-optim] {}", message.as_ref());
+    eprintln!("[MOON] {}", message.as_ref());
 }
