@@ -3,16 +3,16 @@
 ## Start One Cycle
 
 ```bash
-cargo run -- moon-watch --once
+MOON moon-watch --once
 ```
 
 Bootstrap sequence (minimal setup):
 
 ```bash
 cp .env.example .env
-cargo run -- verify --strict
-cargo run -- moon-status
-cargo run -- moon-watch --once
+MOON verify --strict
+MOON moon-status
+MOON moon-watch --once
 ```
 
 Distill trigger behavior:
@@ -33,31 +33,31 @@ Retention windows:
 ## Start Daemon
 
 ```bash
-cargo run -- moon-watch --daemon
+MOON moon-watch --daemon
 ```
 
 ## Manual Distill
 
 ```bash
-cargo run -- moon-distill --archive ~/.lilac_metaflora/archives/raw/<file>.jsonl --session-id <id>
+MOON moon-distill --archive ~/.lilac_metaflora/archives/raw/<file>.jsonl --session-id <id>
 ```
 
 Manual layer-2 queue trigger (same selection logic as watcher):
 
 ```bash
-cargo run -- moon-watch --once --distill-now
+MOON moon-watch --once --distill-now
 ```
 
 ## Recall
 
 ```bash
-cargo run -- moon-recall --query "keyword" --name history
+MOON moon-recall --query "keyword" --name history
 ```
 
 Rebuild history index + normalize archive layout:
 
 ```bash
-cargo run -- moon-index --name history
+MOON moon-index --name history
 ```
 
 ## Key Paths

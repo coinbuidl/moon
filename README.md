@@ -52,7 +52,7 @@ Add this block to your workspace `AGENTS.md` (adjust the repo path if different)
 ### MOON Archive Recall Policy (Required)
 
 1. History search backend is QMD collection `history`, rooted at `~/.lilac_metaflora/archives`, mask `mlib/**/*.md` (archive projections in `~/.lilac_metaflora/archives/mlib/*.md`).
-2. Default history retrieval command is `cargo run --manifest-path /Users/lilac/.lilac_metaflora/skills/moon-system/Cargo.toml -- moon-recall --name history --query "<user-intent-query>"`.
+2. Default history retrieval command is `MOON moon-recall --name history --query "<user-intent-query>"`. (If running from source instead of a compiled binary, use `cargo run --manifest-path /Users/lilac/.lilac_metaflora/skills/moon-system/Cargo.toml -- moon-recall ...`).
 3. Run history retrieval before answering when any condition is true: user references past sessions, pre-compaction context, prior decisions, or current-session context is insufficient.
 4. Retrieval procedure is strict: run one primary query, run one fallback query if no hits, and use top 3 hits only; include `archive_path` in reasoning when available.
 5. If finer detail is required, read the projection frontmatter field `archive_jsonl_path` and fetch only the minimal raw JSONL segment needed.
@@ -70,18 +70,18 @@ Query semantics:
 
 1. Set `.env` (at minimum: `OPENCLAW_BIN`; recommended: explicit path block below).
 2. Validate environment and plugin wiring:
-   `cargo run -- verify --strict`
+   `MOON verify --strict` (or `cargo run -- verify --strict`)
 3. Check Moon runtime paths:
-   `cargo run -- moon-status`
+   `MOON moon-status` (or `cargo run -- moon-status`)
 4. Run one watcher cycle:
-   `cargo run -- moon-watch --once`
+   `MOON moon-watch --once` (or `cargo run -- moon-watch --once`)
 5. Enable daemon mode only after one-shot run is clean.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
-cargo build
+cargo install --path .
 ```
 
 Set `.env` before first run.
@@ -168,24 +168,23 @@ Cheapest possible mode (zero API cost, local-only distillation):
 MOON_DISTILL_PROVIDER=local
 ```
 
-Run a few basics:
+Run a few basics (assuming `MOON` is installed in `$PATH`, otherwise prefix with `cargo run -- `):
 
 ```bash
-cargo run -- status
-cargo run -- install --dry-run
-cargo run -- install
-cargo run -- moon-status
+MOON status
+MOON install --dry-run
+MOON install
+MOON moon-status
 ```
 
 ## CLI
 
 Binary name: `MOON`
 
-Note: OpenClaw plugin id remains `oc-token-optim` for compatibility with
-existing installs, but the runtime CLI process name is now `MOON`.
+It is strongly recommended to install the binary to your `$PATH` using `cargo install --path .` rather than relying on `cargo run -- <command>` in production scenarios.
 
 ```bash
-cargo run -- <command> [flags]
+MOON <command> [flags]
 ```
 
 Global flag:
@@ -220,14 +219,14 @@ Exit codes:
 After OpenClaw upgrade:
 
 ```bash
-cargo run -- post-upgrade
+MOON post-upgrade
 ```
 
 Archive and index latest session:
 
 ```bash
-cargo run -- moon-snapshot
-cargo run -- moon-index --name history
+MOON moon-snapshot
+MOON moon-index --name history
 ```
 
 `moon-index` also normalizes older archive layout into `archives/raw/` and backfills missing projection markdown files before running QMD sync.
@@ -235,13 +234,13 @@ cargo run -- moon-index --name history
 Recall prior context:
 
 ```bash
-cargo run -- moon-recall --name history --query "your query"
+MOON moon-recall --name history --query "your query"
 ```
 
 Run one watcher cycle:
 
 ```bash
-cargo run -- moon-watch --once
+MOON moon-watch --once
 ```
 
 Idle distill selection order:
@@ -256,7 +255,7 @@ Daily distill selection order:
 1. In `MOON_DISTILL_MODE=daily`, distill attempts once per residential day (`MOON_RESIDENTIAL_TIMEZONE`) after the latest archive is idle for `MOON_DISTILL_IDLE_SECS`.
 2. It selects the oldest pending archive day first.
 3. It distills projection markdown sidecars (`*.md`) for those archives.
-4. Use `moon-watch --once --distill-now` for manual immediate layer-2 runs.
+4. Use `MOON moon-watch --once --distill-now` for manual immediate layer-2 runs.
 
 Retention lifecycle windows:
 
