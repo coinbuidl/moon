@@ -214,6 +214,17 @@ Exit codes:
 2. `2` command completed with `ok=false`
 3. `1` runtime/process error
 
+### Local Development & Testing
+If you are actively developing the MOON codebase or writing an AI agent that needs to run tests:
+
+Running the background watcher daemon (`moon-watch --daemon`) via `cargo run` is explicitly blocked. This is a safety feature to prevent file-locking starvation and CPU spikes loop issues if the daemon restarts.
+
+To test the daemon with unreleased local changes, you must compile the binary first and execute it directly:
+```bash
+cargo build
+./target/debug/MOON moon-watch --daemon
+```
+
 ## Common workflows
 
 After OpenClaw upgrade:
