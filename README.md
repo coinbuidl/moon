@@ -113,6 +113,7 @@ MOON_MEMORY_DIR=$MOON_HOME/memory
 MOON_MEMORY_FILE=$MOON_HOME/MEMORY.md
 MOON_LOGS_DIR=$MOON_HOME/MOON/logs
 MOON_CONFIG_PATH=$MOON_HOME/MOON/moon.toml
+MOON_STATE_FILE=$MOON_HOME/state/moon_state.json
 
 # OpenClaw session source
 OPENCLAW_STATE_DIR=$HOME/.openclaw
@@ -131,10 +132,17 @@ MOON_MEMORY_DIR=$MOON_HOME/memory
 MOON_MEMORY_FILE=$MOON_HOME/MEMORY.md
 MOON_LOGS_DIR=$MOON_HOME/skills/MOON/logs
 MOON_CONFIG_PATH=$MOON_HOME/skills/MOON/moon.toml
+MOON_STATE_FILE=$MOON_HOME/skills/MOON/state/moon_state.json
 ```
 
 `moon.toml` is optional. If `MOON_CONFIG_PATH` points to a missing file, MOON
 continues with built-in defaults plus `.env` overrides.
+
+State path override precedence:
+
+1. `MOON_STATE_FILE` (exact file path)
+2. `MOON_STATE_DIR` (directory; file becomes `moon_state.json`)
+3. fallback: `$MOON_HOME/state/moon_state.json`
 
 Recommended split:
 
@@ -344,16 +352,17 @@ Most-used `.env` variables:
 2. `QMD_BIN`
 3. `MOON_HOME`
 4. `MOON_CONFIG_PATH`
-5. `OPENCLAW_SESSIONS_DIR`
-6. `MOON_DISTILL_PROVIDER`
-7. `MOON_DISTILL_MODEL`
-8. `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AI_API_KEY` (distill only)
-9. `MOON_DISTILL_CHUNK_BYTES` (default `auto`; use numeric bytes to force a fixed threshold)
-10. `MOON_DISTILL_MAX_CHUNKS` (default `128`)
-11. `MOON_DISTILL_MODEL_CONTEXT_TOKENS` (optional context hint used by `MOON_DISTILL_CHUNK_BYTES=auto`)
-12. `MOON_HIGH_TOKEN_ALERT_THRESHOLD` (default `1000000`; set `0` to disable)
-13. `MOON_ENABLE_COMPACTION_WRITE`
-14. `MOON_ENABLE_SESSION_ROLLOVER`
+5. `MOON_STATE_FILE` / `MOON_STATE_DIR`
+6. `OPENCLAW_SESSIONS_DIR`
+7. `MOON_DISTILL_PROVIDER`
+8. `MOON_DISTILL_MODEL`
+9. `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AI_API_KEY` (distill only)
+10. `MOON_DISTILL_CHUNK_BYTES` (default `auto`; use numeric bytes to force a fixed threshold)
+11. `MOON_DISTILL_MAX_CHUNKS` (default `128`)
+12. `MOON_DISTILL_MODEL_CONTEXT_TOKENS` (optional context hint used by `MOON_DISTILL_CHUNK_BYTES=auto`)
+13. `MOON_HIGH_TOKEN_ALERT_THRESHOLD` (default `1000000`; set `0` to disable)
+14. `MOON_ENABLE_COMPACTION_WRITE`
+15. `MOON_ENABLE_SESSION_ROLLOVER`
 
 Primary tuning belongs in `moon.toml`:
 
@@ -409,6 +418,8 @@ MOON_HOME="${MOON_HOME:-$HOME/MOON}"
 rm -rf "$MOON_HOME/archives" "$MOON_HOME/continuity" "$MOON_HOME/state" "$MOON_HOME/memory"
 rm -rf "$MOON_HOME/MOON/logs"
 rm -f "$MOON_HOME/MEMORY.md"
+[ -n "${MOON_STATE_FILE:-}" ] && rm -f "$MOON_STATE_FILE"
+[ -n "${MOON_STATE_DIR:-}" ] && rm -rf "$MOON_STATE_DIR"
 
 # Optional: remove persisted Moon config if you created one
 rm -f "$MOON_HOME/MOON/moon.toml"

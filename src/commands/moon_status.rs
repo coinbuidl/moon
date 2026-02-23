@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use crate::commands::CommandReport;
 use crate::moon::paths::resolve_paths;
+use crate::moon::state::state_file_path;
 
 pub fn run() -> Result<CommandReport> {
     let paths = resolve_paths()?;
@@ -12,6 +13,7 @@ pub fn run() -> Result<CommandReport> {
     report.detail(format!("memory_dir={}", paths.memory_dir.display()));
     report.detail(format!("memory_file={}", paths.memory_file.display()));
     report.detail(format!("logs_dir={}", paths.logs_dir.display()));
+    report.detail(format!("state_file={}", state_file_path(&paths).display()));
     report.detail(format!(
         "openclaw_sessions_dir={}",
         paths.openclaw_sessions_dir.display()

@@ -2,6 +2,7 @@ use crate::moon::paths::MoonPaths;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 
@@ -39,6 +40,18 @@ impl Default for MoonState {
 }
 
 pub fn state_file_path(paths: &MoonPaths) -> PathBuf {
+    if let Ok(custom_file) = env::var("MOON_STATE_FILE") {
+        let trimmed = custom_file.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    if let Ok(custom_dir) = env::var("MOON_STATE_DIR") {
+        let trimmed = custom_dir.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("moon_state.json");
+        }
+    }
     paths.moon_home.join("state").join("moon_state.json")
 }
 

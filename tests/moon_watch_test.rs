@@ -95,6 +95,54 @@ fn read_last_distill_trigger_epoch(state_file: &Path) -> Option<u64> {
 
 #[test]
 #[cfg(not(windows))]
+fn moon_watch_once_uses_moon_state_file_override() {
+    let tmp = tempdir().expect("tempdir");
+    let moon_home = tmp.path().join("moon");
+    let sessions_dir = tmp.path().join("sessions");
+    fs::create_dir_all(moon_home.join("archives")).expect("mkdir archives");
+    fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
+    fs::create_dir_all(moon_home.join("MOON/logs")).expect("mkdir logs");
+    fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
+    fs::write(
+        sessions_dir.join("s1.json"),
+        "{\"decision\":\"use moon\"}\n",
+    )
+    .expect("write session");
+
+    let qmd = tmp.path().join("qmd");
+    write_fake_qmd(&qmd);
+    let openclaw = tmp.path().join("openclaw");
+    write_fake_openclaw(&openclaw);
+
+    let custom_state_file = tmp.path().join("custom-state").join("moon_state.json");
+
+    assert_cmd::cargo::cargo_bin_cmd!("MOON")
+        .current_dir(tmp.path())
+        .env("MOON_HOME", &moon_home)
+        .env("MOON_STATE_FILE", &custom_state_file)
+        .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
+        .env("QMD_BIN", &qmd)
+        .env("OPENCLAW_BIN", &openclaw)
+        .arg("moon-watch")
+        .arg("--once")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(contains(format!("state_file={}", custom_state_file.display())));
+
+    assert!(
+        custom_state_file.exists(),
+        "expected custom state file to exist at {}",
+        custom_state_file.display()
+    );
+    assert!(
+        !moon_home.join("state/moon_state.json").exists(),
+        "default state path should not be created when MOON_STATE_FILE is set"
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
 fn moon_watch_once_triggers_pipeline_with_low_thresholds() {
     let tmp = tempdir().expect("tempdir");
     let moon_home = tmp.path().join("moon");
