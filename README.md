@@ -397,34 +397,54 @@ as fallback inputs for `MOON_TRIGGER_RATIO`.
 
 ## Uninstall (quick)
 
-If you need full cleanup, stop services and remove plugin/runtime data:
+This removes MOON services/plugin/runtime files and keeps user assets intact.
+
+User assets that are preserved:
+
+1. `$MOON_ARCHIVES_DIR` (archives)
+2. `$MOON_MEMORY_DIR` (daily memory)
+3. `$MOON_MEMORY_FILE` (long-term memory)
+
+Use trash-first cleanup (preferred):
 
 ```bash
+trash_path() {
+  [ -e "$1" ] || return 0
+  if command -v trash >/dev/null 2>&1; then
+    trash "$1"
+  elif command -v gio >/dev/null 2>&1; then
+    gio trash "$1"
+  else
+    mkdir -p "$HOME/.Trash"
+    mv "$1" "$HOME/.Trash/"
+  fi
+}
+
 # Stop known MOON service names
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.MOON.agent.plist 2>/dev/null || true
 systemctl --user stop MOON 2>/dev/null || true
 systemctl --user disable MOON 2>/dev/null || true
 
-rm -f ~/Library/LaunchAgents/com.MOON.agent.plist
-rm -f ~/.config/systemd/user/MOON.service
+trash_path "$HOME/Library/LaunchAgents/com.MOON.agent.plist"
+trash_path "$HOME/.config/systemd/user/MOON.service"
 systemctl --user daemon-reload 2>/dev/null || true
 
 OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-$OPENCLAW_STATE_DIR/openclaw.json}"
 openclaw plugins uninstall MOON 2>/dev/null || true
-rm -rf "$OPENCLAW_STATE_DIR/extensions/MOON"
+trash_path "$OPENCLAW_STATE_DIR/extensions/MOON"
 
 MOON_HOME="${MOON_HOME:-$HOME/MOON}"
-rm -rf "$MOON_HOME/archives" "$MOON_HOME/continuity" "$MOON_HOME/MOON/state" "$MOON_HOME/memory"
-# Optional legacy cleanup from older builds:
-rm -rf "$MOON_HOME/state"
-rm -rf "$MOON_HOME/MOON/logs"
-rm -f "$MOON_HOME/MEMORY.md"
-[ -n "${MOON_STATE_FILE:-}" ] && rm -f "$MOON_STATE_FILE"
-[ -n "${MOON_STATE_DIR:-}" ] && rm -rf "$MOON_STATE_DIR"
+# Remove MOON-owned runtime artifacts only (keep archives/memory/MEMORY.md)
+trash_path "$MOON_HOME/continuity"
+trash_path "$MOON_HOME/MOON/state"
+trash_path "$MOON_HOME/state"                # legacy state location
+trash_path "$MOON_HOME/MOON/logs"
+[ -n "${MOON_STATE_FILE:-}" ] && trash_path "$MOON_STATE_FILE"
+[ -n "${MOON_STATE_DIR:-}" ] && trash_path "$MOON_STATE_DIR"
 
 # Optional: remove persisted Moon config if you created one
-rm -f "$MOON_HOME/MOON/moon.toml"
+trash_path "$MOON_HOME/MOON/moon.toml"
 ```
 
 Note: uninstalling the plugin does not automatically restore custom OpenClaw
