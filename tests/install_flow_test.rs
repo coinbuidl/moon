@@ -76,6 +76,30 @@ fn install_creates_plugin_and_stage2_config_entries() {
             .and_then(Value::as_i64),
         Some(6_000)
     );
+    assert_eq!(
+        cfg.get("plugins")
+            .and_then(|v| v.get("installs"))
+            .and_then(|v| v.get("moon"))
+            .and_then(|v| v.get("source"))
+            .and_then(Value::as_str),
+        Some("path")
+    );
+    assert_eq!(
+        cfg.get("plugins")
+            .and_then(|v| v.get("installs"))
+            .and_then(|v| v.get("moon"))
+            .and_then(|v| v.get("sourcePath"))
+            .and_then(Value::as_str),
+        Some(plugin_dir.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        cfg.get("plugins")
+            .and_then(|v| v.get("installs"))
+            .and_then(|v| v.get("moon"))
+            .and_then(|v| v.get("installPath"))
+            .and_then(Value::as_str),
+        Some(plugin_dir.to_string_lossy().as_ref())
+    );
 
     assert!(
         cfg.get("agents")
@@ -90,6 +114,6 @@ fn install_creates_plugin_and_stage2_config_entries() {
             .and_then(|v| v.get("defaults"))
             .and_then(|v| v.get("contextTokens"))
             .and_then(Value::as_i64),
-        Some(16_000)
+        None
     );
 }

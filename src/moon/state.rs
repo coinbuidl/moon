@@ -19,6 +19,7 @@ pub struct MoonState {
     pub last_usage_ratio: Option<f64>,
     pub last_provider: Option<String>,
     pub distilled_archives: BTreeMap<String, u64>,
+    pub compaction_hysteresis_active: BTreeMap<String, u64>,
     pub inbound_seen_files: BTreeMap<String, u64>,
 }
 
@@ -34,6 +35,7 @@ impl Default for MoonState {
             last_usage_ratio: None,
             last_provider: None,
             distilled_archives: BTreeMap::new(),
+            compaction_hysteresis_active: BTreeMap::new(),
             inbound_seen_files: BTreeMap::new(),
         }
     }

@@ -1,4 +1,5 @@
 use predicates::str::contains;
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
@@ -48,4 +49,33 @@ fn second_install_is_noop_for_plugin_sync() {
         .assert()
         .success()
         .stdout(contains("plugin_changed=false"));
+
+    let cfg: Value = serde_json::from_str(&fs::read_to_string(&config_path).expect("read config"))
+        .expect("parse config");
+    let expected_plugin_dir = state_dir.join("extensions").join("moon");
+
+    assert_eq!(
+        cfg.get("plugins")
+            .and_then(|v| v.get("installs"))
+            .and_then(|v| v.get("moon"))
+            .and_then(|v| v.get("source"))
+            .and_then(Value::as_str),
+        Some("path")
+    );
+    assert_eq!(
+        cfg.get("plugins")
+            .and_then(|v| v.get("installs"))
+            .and_then(|v| v.get("moon"))
+            .and_then(|v| v.get("sourcePath"))
+            .and_then(Value::as_str),
+        Some(expected_plugin_dir.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        cfg.get("plugins")
+            .and_then(|v| v.get("installs"))
+            .and_then(|v| v.get("moon"))
+            .and_then(|v| v.get("installPath"))
+            .and_then(Value::as_str),
+        Some(expected_plugin_dir.to_string_lossy().as_ref())
+    );
 }

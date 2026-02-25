@@ -1,3 +1,6 @@
+use crate::moon::config::{
+    MoonContextCompactionAuthority, MoonContextConfig, MoonContextPruneMode, MoonContextWindowMode,
+};
 use crate::openclaw::paths::{OpenClawPaths, ensure_parent_dir};
 use anyhow::{Context, Result};
 use serde_json::{Map, Value, json};
@@ -7,12 +10,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 
 pub const MIN_AGENT_CONTEXT_TOKENS: u64 = 16_000;
+// OpenClaw currently validates compaction mode as `default|safeguard`.
+// Moon authority therefore uses `default` as the least-opinionated, valid mode.
+pub const MOON_AUTHORITY_COMPACTION_MODE: &str = "default";
+pub const OPENCLAW_AUTHORITY_COMPACTION_MODE: &str = "safeguard";
 
 #[derive(Debug, Clone, Default)]
 pub struct ConfigPatchOutcome {
     pub changed: bool,
     pub inserted_paths: Vec<String>,
     pub forced_paths: Vec<String>,
+    pub removed_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +152,27 @@ fn set_path_u64_floor(
     }
 }
 
+fn remove_path(root: &mut Value, path: &[&str], outcome: &mut ConfigPatchOutcome) {
+    if path.is_empty() {
+        return;
+    }
+    let mut cursor = root;
+    for key in &path[..path.len() - 1] {
+        let Some(next) = cursor.get_mut(*key) else {
+            return;
+        };
+        cursor = next;
+    }
+    let Some(map) = cursor.as_object_mut() else {
+        return;
+    };
+    let leaf = path[path.len() - 1];
+    if map.remove(leaf).is_some() {
+        outcome.changed = true;
+        outcome.removed_paths.push(path.join("."));
+    }
+}
+
 fn patch_channel_limits(root: &mut Value, force: bool, outcome: &mut ConfigPatchOutcome) {
     let Some(channels) = root.get_mut("channels") else {
         return;
@@ -233,17 +262,7 @@ fn patch_plugin_token_defaults(
     }
 }
 
-pub fn apply_config_patches(
-    root: &mut Value,
-    opts: &ConfigPatchOptions,
-    plugin_id: &str,
-) -> ConfigPatchOutcome {
-    if !root.is_object() {
-        *root = json!({});
-    }
-
-    let mut outcome = ConfigPatchOutcome::default();
-
+fn patch_context_pruning_defaults(root: &mut Value, force: bool, outcome: &mut ConfigPatchOutcome) {
     let defaults_prefix = ["agents", "defaults"];
     for (suffix, value) in [
         (&["contextPruning", "mode"][..], Value::from("cache-ttl")),
@@ -260,23 +279,79 @@ pub fn apply_config_patches(
             Value::from(1500),
         ),
     ] {
-        set_path_with_prefix(
-            root,
-            &defaults_prefix,
-            suffix,
-            value,
-            opts.force,
-            &mut outcome,
-        );
+        set_path_with_prefix(root, &defaults_prefix, suffix, value, force, outcome);
+    }
+}
+
+fn patch_context_policy(
+    root: &mut Value,
+    context: &MoonContextConfig,
+    outcome: &mut ConfigPatchOutcome,
+) {
+    match context.window_mode {
+        MoonContextWindowMode::Inherit => {
+            remove_path(root, &["agents", "defaults", "contextTokens"], outcome);
+        }
+        MoonContextWindowMode::Fixed => {
+            if let Some(tokens) = context.window_tokens {
+                set_path_if_absent_or_forced(
+                    root,
+                    &["agents", "defaults", "contextTokens"],
+                    Value::from(tokens),
+                    true,
+                    outcome,
+                );
+            }
+        }
     }
 
-    let context_floor = read_path_u64(root, &["agents", "defaults", "contextTokens"]).unwrap_or(0);
-    set_path_u64_floor(
+    match context.prune_mode {
+        MoonContextPruneMode::Disabled => {
+            remove_path(root, &["agents", "defaults", "contextPruning"], outcome);
+        }
+        MoonContextPruneMode::Guarded => {
+            patch_context_pruning_defaults(root, true, outcome);
+        }
+    }
+
+    let mode = match context.compaction_authority {
+        MoonContextCompactionAuthority::Moon => MOON_AUTHORITY_COMPACTION_MODE,
+        MoonContextCompactionAuthority::Openclaw => OPENCLAW_AUTHORITY_COMPACTION_MODE,
+    };
+    set_path_if_absent_or_forced(
         root,
-        &["agents", "defaults", "contextTokens"],
-        context_floor.max(MIN_AGENT_CONTEXT_TOKENS),
-        &mut outcome,
+        &["agents", "defaults", "compaction", "mode"],
+        Value::from(mode),
+        true,
+        outcome,
     );
+}
+
+pub fn apply_config_patches(
+    root: &mut Value,
+    opts: &ConfigPatchOptions,
+    plugin_id: &str,
+    context_policy: Option<&MoonContextConfig>,
+) -> ConfigPatchOutcome {
+    if !root.is_object() {
+        *root = json!({});
+    }
+
+    let mut outcome = ConfigPatchOutcome::default();
+
+    if let Some(context) = context_policy {
+        patch_context_policy(root, context, &mut outcome);
+    } else {
+        patch_context_pruning_defaults(root, opts.force, &mut outcome);
+        if let Some(context_floor) = read_path_u64(root, &["agents", "defaults", "contextTokens"]) {
+            set_path_u64_floor(
+                root,
+                &["agents", "defaults", "contextTokens"],
+                context_floor.max(MIN_AGENT_CONTEXT_TOKENS),
+                &mut outcome,
+            );
+        }
+    }
 
     patch_channel_limits(root, opts.force, &mut outcome);
     patch_plugin_token_defaults(root, plugin_id, opts.force, &mut outcome);
@@ -291,6 +366,41 @@ pub fn ensure_plugin_enabled(root: &mut Value, plugin_id: &str) -> ConfigPatchOu
         root,
         &["plugins", "entries", plugin_id, "enabled"],
         Value::Bool(true),
+        true,
+        &mut outcome,
+    );
+
+    outcome
+}
+
+pub fn ensure_plugin_install_record(
+    root: &mut Value,
+    plugin_id: &str,
+    plugin_dir: &Path,
+) -> ConfigPatchOutcome {
+    let mut outcome = ConfigPatchOutcome::default();
+    let plugin_dir_value = plugin_dir.display().to_string();
+
+    // Keep installs metadata aligned with the managed extension path so OpenClaw
+    // can treat this plugin as provenance-tracked local code.
+    set_path_if_absent_or_forced(
+        root,
+        &["plugins", "installs", plugin_id, "source"],
+        Value::from("path"),
+        true,
+        &mut outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &["plugins", "installs", plugin_id, "sourcePath"],
+        Value::from(plugin_dir_value.clone()),
+        true,
+        &mut outcome,
+    );
+    set_path_if_absent_or_forced(
+        root,
+        &["plugins", "installs", plugin_id, "installPath"],
+        Value::from(plugin_dir_value),
         true,
         &mut outcome,
     );

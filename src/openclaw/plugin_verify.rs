@@ -12,6 +12,16 @@ pub struct PluginVerifyOutcome {
     pub listed_by_openclaw: bool,
     pub loaded_by_openclaw: bool,
     pub assets_match_local: bool,
+    pub provenance_warning_detected: bool,
+    pub provenance_diagnostic_messages: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PluginListState {
+    listed: bool,
+    loaded: bool,
+    provenance_warning_detected: bool,
+    provenance_diagnostic_messages: Vec<String>,
 }
 
 pub fn verify_plugin(paths: &OpenClawPaths) -> Result<PluginVerifyOutcome> {
@@ -25,16 +35,18 @@ pub fn verify_plugin(paths: &OpenClawPaths) -> Result<PluginVerifyOutcome> {
         false
     };
 
-    let (listed_by_openclaw, loaded_by_openclaw) = match gateway::plugins_list_json() {
+    let list_state = match gateway::plugins_list_json() {
         Ok(raw) => parse_plugins_list_state(&raw, &paths.plugin_id),
-        Err(_) => (false, false),
+        Err(_) => PluginListState::default(),
     };
 
     Ok(PluginVerifyOutcome {
         present_on_disk,
-        listed_by_openclaw,
-        loaded_by_openclaw,
+        listed_by_openclaw: list_state.listed,
+        loaded_by_openclaw: list_state.loaded,
         assets_match_local,
+        provenance_warning_detected: list_state.provenance_warning_detected,
+        provenance_diagnostic_messages: list_state.provenance_diagnostic_messages,
     })
 }
 
@@ -51,18 +63,24 @@ fn plugin_assets_match_local(paths: &OpenClawPaths) -> bool {
     true
 }
 
-fn parse_plugins_list_state(raw: &str, plugin_id: &str) -> (bool, bool) {
+fn parse_plugins_list_state(raw: &str, plugin_id: &str) -> PluginListState {
     let parsed = serde_json::from_str::<Value>(raw);
     let Ok(v) = parsed else {
-        return (false, false);
+        return PluginListState::default();
     };
 
     let arr_opt = v
         .as_array()
         .or_else(|| v.get("plugins").and_then(Value::as_array));
 
+    let mut state = PluginListState {
+        provenance_diagnostic_messages: parse_provenance_diagnostics(&v, plugin_id),
+        ..Default::default()
+    };
+    state.provenance_warning_detected = !state.provenance_diagnostic_messages.is_empty();
+
     let Some(arr) = arr_opt else {
-        return (false, false);
+        return state;
     };
 
     for entry in arr {
@@ -74,13 +92,69 @@ fn parse_plugins_list_state(raw: &str, plugin_id: &str) -> (bool, bool) {
         if !is_match {
             continue;
         }
-        let loaded = entry
+        state.listed = true;
+        state.loaded = entry
             .get("status")
             .and_then(Value::as_str)
             .map(|status| status == "loaded")
             .unwrap_or(true);
-        return (true, loaded);
+        return state;
     }
 
-    (false, false)
+    state
+}
+
+fn parse_provenance_diagnostics(root: &Value, plugin_id: &str) -> Vec<String> {
+    let Some(diagnostics) = root.get("diagnostics").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+
+    let mut matches = Vec::new();
+    for diagnostic in diagnostics {
+        let Some(message) = diagnostic.get("message").and_then(Value::as_str) else {
+            continue;
+        };
+        if !diagnostic_targets_plugin(diagnostic, plugin_id) {
+            continue;
+        }
+        if !is_provenance_warning_message(message) {
+            continue;
+        }
+        matches.push(message.to_string());
+    }
+    matches
+}
+
+fn diagnostic_targets_plugin(diagnostic: &Value, plugin_id: &str) -> bool {
+    if let Some(id) = diagnostic.get("pluginId").and_then(Value::as_str) {
+        return id == plugin_id;
+    }
+
+    if let Some(source) = diagnostic.get("source").and_then(Value::as_str) {
+        let marker = format!("/{plugin_id}/");
+        if source.contains(&marker) {
+            return true;
+        }
+    }
+
+    diagnostic
+        .get("message")
+        .and_then(Value::as_str)
+        .map(|message| {
+            let lowered = message.to_ascii_lowercase();
+            lowered.contains(&plugin_id.to_ascii_lowercase()) && lowered.contains("provenance")
+        })
+        .unwrap_or(false)
+}
+
+fn is_provenance_warning_message(message: &str) -> bool {
+    let lowered = message.to_ascii_lowercase();
+    if lowered.contains("loaded without install/load-path provenance") {
+        return true;
+    }
+
+    lowered.contains("provenance")
+        && (lowered.contains("untracked")
+            || lowered.contains("install")
+            || lowered.contains("load-path"))
 }

@@ -69,13 +69,15 @@ Query semantics:
 ## Agent bootstrap checklist
 
 1. Set `.env` (at minimum: `OPENCLAW_BIN`; recommended: explicit path block below).
-2. Validate environment and plugin wiring:
+2. Apply plugin install + provenance self-heal:
+   `moon install` (or `cargo run -- install`)
+3. Validate environment and plugin wiring:
    `moon verify --strict` (or `cargo run -- verify --strict`)
-3. Check moon runtime paths:
+4. Check moon runtime paths:
    `moon moon-status` (or `cargo run -- moon-status`)
-4. Run one watcher cycle:
+5. Run one watcher cycle:
    `moon moon-watch --once` (or `cargo run -- moon-watch --once`)
-5. Enable daemon mode only after one-shot run is clean.
+6. Enable daemon mode only after one-shot run is clean.
 
 ## Quick start
 
@@ -84,12 +86,19 @@ cp .env.example .env
 cp moon.toml.example moon.toml
 $EDITOR .env
 cargo install --path .
+moon install
 moon verify --strict
 moon moon-status
 ```
 
 `.env.example` and `moon.toml.example` are templates. Keep them generic; put
 machine-specific values in `.env` and local `moon.toml` only.
+
+Important: `.env` autoload is based on the process working directory. If you run
+`moon` outside this repo (for example from `~`), this repo's `.env` is not
+loaded and runtime paths fall back to defaults (for example `$HOME/moon`).
+Run commands from the repo root, or export/source the same env vars in your
+shell before running `moon` from elsewhere.
 
 Required `.env` value:
 
@@ -147,7 +156,7 @@ State path override precedence:
 Recommended split:
 
 1. `.env`: paths, binaries, provider/model/API keys, and env-only runtime knobs.
-2. `moon.toml`: tuning in `[thresholds]`, `[watcher]`, `[distill]`, `[retention]`, `[inbound_watch]`.
+2. `moon.toml`: tuning in `[context]`, `[watcher]`, `[distill]`, `[retention]`, `[inbound_watch]` (and optional legacy `[thresholds]`).
 
 If the same tuning key appears in both places, `.env` wins.
 
@@ -156,6 +165,26 @@ Create a local config file:
 ```bash
 cp moon.toml.example moon.toml
 ```
+
+Context policy (optional but recommended when moon owns compaction):
+
+```toml
+[context]
+window_mode = "inherit"            # or "fixed" with window_tokens
+# window_tokens = 200000
+prune_mode = "disabled"            # "disabled" or "guarded"
+compaction_authority = "moon"      # "moon" or "openclaw"
+compaction_start_ratio = 0.78
+compaction_emergency_ratio = 0.90
+compaction_recover_ratio = 0.65
+```
+
+When `compaction_authority = "moon"`:
+
+1. `moon install` / `moon repair` enforce OpenClaw compaction mode to `default` (valid on current OpenClaw builds).
+2. moon watcher is the primary trigger for `/compact` based on `[context]` ratios.
+3. OpenClaw may still auto-compact as a fallback on overflow/threshold paths.
+4. `moon status` reports a policy violation (`ok=false`) if OpenClaw config drifts from the expected mode for the selected authority.
 
 Cheaper distill profile (recommended for the agent):
 
@@ -170,8 +199,13 @@ GEMINI_API_KEY=...
 Distill safety guardrails (recommended):
 
 ```toml
-[thresholds]
-trigger_ratio = 0.5
+[context]
+window_mode = "inherit"
+prune_mode = "disabled"
+compaction_authority = "moon"
+compaction_start_ratio = 0.78
+compaction_emergency_ratio = 0.90
+compaction_recover_ratio = 0.65
 
 [watcher]
 poll_interval_secs = 30
@@ -204,6 +238,8 @@ MOON_DISTILL_CHUNK_BYTES=auto
 MOON_DISTILL_MAX_CHUNKS=128
 
 # Optional explicit model context hint for `auto` mode.
+# This only influences moon distill chunk sizing; it does NOT set
+# `agents.defaults.contextTokens` in OpenClaw.
 # MOON_DISTILL_MODEL_CONTEXT_TOKENS=250000
 
 # Background watcher alert threshold for extreme token usage (0 disables alert).
@@ -223,6 +259,7 @@ Run a few basics (assuming `moon` is installed in `$PATH`, otherwise prefix with
 moon status
 moon install --dry-run
 moon install
+moon verify --strict
 moon moon-status
 ```
 
@@ -262,6 +299,14 @@ Exit codes:
 1. `0` command completed with `ok=true`
 2. `2` command completed with `ok=false`
 3. `1` runtime/process error
+
+## Provenance Behavior (Agent-critical)
+
+1. `moon install` always normalizes `plugins.installs.moon` (`source`, `sourcePath`, `installPath`) to the managed plugin directory.
+2. `moon status` and `moon verify --strict` treat OpenClaw runtime diagnostics from `openclaw plugins list --json` as the authoritative provenance signal.
+3. If runtime diagnostics report `loaded without install/load-path provenance`, `status`/`verify --strict` fail hard.
+4. If `plugins.installs.moon` is missing or path-mismatched but runtime diagnostics are clean, `status` prints a non-fatal `provenance repair hint`.
+5. First-time bootstrap and post-upgrade routine should always include `moon install` before `moon verify --strict`.
 
 ### Local Development & Testing
 If you are actively developing the moon codebase or writing an AI agent that needs to run tests:
@@ -366,11 +411,12 @@ Most-used `.env` variables:
 
 Primary tuning belongs in `moon.toml`:
 
-1. `[thresholds] trigger_ratio`
+1. `[context] window_mode`, `window_tokens`, `prune_mode`, `compaction_authority`, `compaction_start_ratio`, `compaction_emergency_ratio`, `compaction_recover_ratio`
 2. `[watcher] poll_interval_secs`, `cooldown_secs`
 3. `[distill] mode`, `idle_secs`, `max_per_cycle`, `residential_timezone`, `topic_discovery`
 4. `[retention] active_days`, `warm_days`, `cold_days`
 5. `[inbound_watch] enabled`, `recursive`, `watch_paths`, `event_mode`
+6. `[thresholds] trigger_ratio` (legacy/fallback path when context policy is not active)
 
 Legacy compatibility: `MOON_THRESHOLD_COMPACTION_RATIO`,
 `MOON_THRESHOLD_ARCHIVE_RATIO`, and `MOON_THRESHOLD_PRUNE_RATIO` are still read

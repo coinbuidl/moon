@@ -64,6 +64,16 @@ pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
     ));
     report.detail(format!("poll_interval_secs={}", cycle.poll_interval_secs));
     report.detail(format!("threshold.trigger={}", cycle.trigger_threshold));
+    report.detail(format!(
+        "compaction.authority={}",
+        cycle.compaction_authority
+    ));
+    if let Some(v) = cycle.compaction_emergency_ratio {
+        report.detail(format!("compaction.emergency_ratio={v}"));
+    }
+    if let Some(v) = cycle.compaction_recover_ratio {
+        report.detail(format!("compaction.recover_ratio={v}"));
+    }
     report.detail(format!("distill.mode={}", cycle.distill_mode));
     report.detail(format!("distill.idle_secs={}", cycle.distill_idle_secs));
     report.detail(format!(

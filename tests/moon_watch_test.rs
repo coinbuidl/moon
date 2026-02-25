@@ -93,6 +93,27 @@ fn read_last_distill_trigger_epoch(state_file: &Path) -> Option<u64> {
         .and_then(Value::as_u64)
 }
 
+fn write_context_policy_for_watch(moon_home: &Path, authority: &str) {
+    let config_path = moon_home.join("moon/moon.toml");
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).expect("mkdir moon config parent");
+    }
+    fs::write(
+        &config_path,
+        format!(
+            r#"[context]
+window_mode = "inherit"
+prune_mode = "disabled"
+compaction_authority = "{authority}"
+compaction_start_ratio = 0.78
+compaction_emergency_ratio = 0.90
+compaction_recover_ratio = 0.65
+"#
+        ),
+    )
+    .expect("write moon context policy");
+}
+
 #[test]
 #[cfg(not(windows))]
 fn moon_watch_once_uses_moon_state_file_override() {
@@ -802,4 +823,138 @@ fn moon_watch_once_retention_keeps_recent_cold_window_archives() {
     let state_raw =
         fs::read_to_string(moon_home.join("moon/state/moon_state.json")).expect("state");
     assert!(state_raw.contains(&archive_path_str));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn moon_watch_context_policy_bypasses_cooldown_on_emergency_ratio() {
+    let tmp = tempdir().expect("tempdir");
+    let moon_home = tmp.path().join("moon");
+    let sessions_dir = tmp.path().join("sessions");
+    let compact_log = tmp.path().join("compact.log");
+    fs::create_dir_all(moon_home.join("archives")).expect("mkdir archives");
+    fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
+    fs::create_dir_all(moon_home.join("moon/logs")).expect("mkdir logs");
+    fs::create_dir_all(moon_home.join("moon/state")).expect("mkdir state");
+    fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
+    fs::write(
+        sessions_dir.join("seed.json"),
+        "{\"decision\":\"emergency\"}\n",
+    )
+    .expect("seed");
+    fs::write(
+        sessions_dir.join("sess-over.jsonl"),
+        "{\"messages\":[\"discord emergency\"]}\n",
+    )
+    .expect("write session file");
+    fs::write(
+        sessions_dir.join("sessions.json"),
+        r#"{"agent:main:discord:channel:over":{"sessionId":"sess-over"}}"#,
+    )
+    .expect("write sessions map");
+    write_context_policy_for_watch(&moon_home, "moon");
+
+    let now_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time")
+        .as_secs();
+    let state = format!(
+        "{{\n  \"schema_version\": 1,\n  \"last_heartbeat_epoch_secs\": 0,\n  \"last_archive_trigger_epoch_secs\": {now_epoch},\n  \"last_compaction_trigger_epoch_secs\": {now_epoch},\n  \"last_distill_trigger_epoch_secs\": null,\n  \"last_session_id\": null,\n  \"last_usage_ratio\": null,\n  \"last_provider\": null,\n  \"distilled_archives\": {{}},\n  \"compaction_hysteresis_active\": {{}},\n  \"inbound_seen_files\": {{}}\n}}\n"
+    );
+    fs::write(moon_home.join("moon/state/moon_state.json"), state).expect("write state");
+
+    let qmd = tmp.path().join("qmd");
+    write_fake_qmd(&qmd);
+    let openclaw = tmp.path().join("openclaw");
+    write_fake_openclaw(&openclaw);
+    let sessions_json = r#"{"path":"x","count":1,"sessions":[{"key":"agent:main:discord:channel:over","totalTokens":95,"contextTokens":100}]}"#;
+
+    assert_cmd::cargo::cargo_bin_cmd!("moon")
+        .current_dir(tmp.path())
+        .env("MOON_HOME", &moon_home)
+        .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
+        .env("QMD_BIN", &qmd)
+        .env("OPENCLAW_BIN", &openclaw)
+        .env("MOON_TEST_SESSIONS_JSON", sessions_json)
+        .env("MOON_TEST_COMPACT_LOG", &compact_log)
+        .env("MOON_COOLDOWN_SECS", "3600")
+        .arg("moon-watch")
+        .arg("--once")
+        .assert()
+        .success();
+
+    let compact_calls = fs::read_to_string(&compact_log).expect("read compact log");
+    assert!(compact_calls.contains("agent:main:discord:channel:over"));
+    assert!(compact_calls.contains("/compact"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn moon_watch_context_policy_hysteresis_blocks_until_recover_ratio() {
+    let tmp = tempdir().expect("tempdir");
+    let moon_home = tmp.path().join("moon");
+    let sessions_dir = tmp.path().join("sessions");
+    let compact_log = tmp.path().join("compact.log");
+    fs::create_dir_all(moon_home.join("archives")).expect("mkdir archives");
+    fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
+    fs::create_dir_all(moon_home.join("moon/logs")).expect("mkdir logs");
+    fs::create_dir_all(moon_home.join("moon/state")).expect("mkdir state");
+    fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
+    fs::write(
+        sessions_dir.join("sess-over.jsonl"),
+        "{\"messages\":[\"discord hysteresis\"]}\n",
+    )
+    .expect("write session file");
+    fs::write(
+        sessions_dir.join("sessions.json"),
+        r#"{"agent:main:discord:channel:over":{"sessionId":"sess-over"}}"#,
+    )
+    .expect("write sessions map");
+    write_context_policy_for_watch(&moon_home, "moon");
+
+    let qmd = tmp.path().join("qmd");
+    write_fake_qmd(&qmd);
+    let openclaw = tmp.path().join("openclaw");
+    write_fake_openclaw(&openclaw);
+
+    let run_watch = |sessions_json: &str| {
+        assert_cmd::cargo::cargo_bin_cmd!("moon")
+            .current_dir(tmp.path())
+            .env("MOON_HOME", &moon_home)
+            .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
+            .env("QMD_BIN", &qmd)
+            .env("OPENCLAW_BIN", &openclaw)
+            .env("MOON_TEST_SESSIONS_JSON", sessions_json)
+            .env("MOON_TEST_COMPACT_LOG", &compact_log)
+            .env("MOON_COOLDOWN_SECS", "0")
+            .arg("moon-watch")
+            .arg("--once")
+            .assert()
+            .success();
+    };
+    let compact_calls = || -> usize {
+        fs::read_to_string(&compact_log)
+            .unwrap_or_default()
+            .matches("\"message\":\"/compact\"")
+            .count()
+    };
+
+    let over_start = r#"{"path":"x","count":1,"sessions":[{"key":"agent:main:discord:channel:over","totalTokens":82,"contextTokens":100}]}"#;
+    let below_recover = r#"{"path":"x","count":1,"sessions":[{"key":"agent:main:discord:channel:over","totalTokens":60,"contextTokens":100}]}"#;
+
+    run_watch(over_start);
+    let first_count = compact_calls();
+    assert_eq!(first_count, 1);
+
+    run_watch(over_start);
+    let second_count = compact_calls();
+    assert_eq!(second_count, 1);
+
+    run_watch(below_recover);
+    let third_count = compact_calls();
+    assert_eq!(third_count, 1);
+
+    run_watch(over_start);
+    let fourth_count = compact_calls();
+    assert_eq!(fourth_count, 2);
 }

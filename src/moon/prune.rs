@@ -59,14 +59,13 @@ pub fn apply_aggressive_profile(_paths: &MoonPaths, plugin_id: &str) -> Result<S
     let mut cfg = read_config_value(&oc_paths)?;
     let mut changed = false;
 
-    let reserve_floor = path_u64(&cfg, &["agents", "defaults", "contextTokens"])
-        .unwrap_or(MIN_AGENT_CONTEXT_TOKENS)
-        .max(MIN_AGENT_CONTEXT_TOKENS);
-    changed |= set_path_u64_floor(
-        &mut cfg,
-        &["agents", "defaults", "contextTokens"],
-        reserve_floor,
-    );
+    if let Some(reserve_floor) = path_u64(&cfg, &["agents", "defaults", "contextTokens"]) {
+        changed |= set_path_u64_floor(
+            &mut cfg,
+            &["agents", "defaults", "contextTokens"],
+            reserve_floor.max(MIN_AGENT_CONTEXT_TOKENS),
+        );
+    }
 
     changed |= set_path_u64_floor(
         &mut cfg,

@@ -79,7 +79,7 @@ fn patch_respects_existing_values_unless_forced() {
             .and_then(|v| v.get("defaults"))
             .and_then(|v| v.get("contextTokens"))
             .and_then(Value::as_i64),
-        Some(16_000)
+        None
     );
 
     assert_cmd::cargo::cargo_bin_cmd!("moon")
@@ -119,6 +119,6 @@ fn patch_respects_existing_values_unless_forced() {
             .and_then(|v| v.get("defaults"))
             .and_then(|v| v.get("contextTokens"))
             .and_then(Value::as_i64),
-        Some(16_000)
+        None
     );
 }

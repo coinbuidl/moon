@@ -4,7 +4,9 @@ use crate::moon::archive::{
 };
 use crate::moon::audit;
 use crate::moon::channel_archive_map;
-use crate::moon::config::{MoonRetentionConfig, load_config};
+use crate::moon::config::{
+    MoonContextCompactionAuthority, MoonContextConfig, MoonRetentionConfig, load_config,
+};
 use crate::moon::continuity::{ContinuityOutcome, build_continuity};
 use crate::moon::distill::{
     DistillInput, DistillOutput, archive_file_size, distill_chunk_bytes, load_archive_excerpt,
@@ -18,7 +20,7 @@ use crate::moon::session_usage::{
 };
 use crate::moon::snapshot::latest_session_file;
 use crate::moon::state::{load, save};
-use crate::moon::thresholds::{TriggerKind, evaluate};
+use crate::moon::thresholds::{TriggerKind, evaluate, evaluate_context_compaction_candidate};
 use crate::moon::warn::{self, WarnEvent};
 use crate::openclaw::gateway;
 use anyhow::{Context, Result};
@@ -69,6 +71,9 @@ pub struct WatchCycleOutcome {
     pub heartbeat_epoch_secs: u64,
     pub poll_interval_secs: u64,
     pub trigger_threshold: f64,
+    pub compaction_authority: String,
+    pub compaction_emergency_ratio: Option<f64>,
+    pub compaction_recover_ratio: Option<f64>,
     pub distill_mode: String,
     pub distill_idle_secs: u64,
     pub distill_max_per_cycle: u64,
@@ -156,6 +161,29 @@ fn unified_layer1_last_trigger_epoch(state: &crate::moon::state::MoonState) -> O
         (Some(v), None) | (None, Some(v)) => Some(v),
         (None, None) => None,
     }
+}
+
+fn compaction_authority_name(policy: Option<&MoonContextConfig>) -> String {
+    match policy.map(|p| &p.compaction_authority) {
+        Some(MoonContextCompactionAuthority::Moon) => "moon".to_string(),
+        Some(MoonContextCompactionAuthority::Openclaw) => "openclaw".to_string(),
+        None => "legacy-moon".to_string(),
+    }
+}
+
+fn effective_compaction_start_ratio(
+    cfg: &crate::moon::config::MoonConfig,
+    policy: Option<&MoonContextConfig>,
+) -> f64 {
+    if let Some(policy) = policy
+        && matches!(
+            policy.compaction_authority,
+            MoonContextCompactionAuthority::Moon
+        )
+    {
+        return policy.compaction_start_ratio;
+    }
+    cfg.thresholds.trigger_ratio
 }
 
 fn high_token_alert_threshold() -> u64 {
@@ -706,7 +734,30 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
         }
     }
 
-    let triggers = evaluate(&cfg, &state, &usage);
+    let context_policy = cfg.context.as_ref();
+    let effective_trigger_threshold = effective_compaction_start_ratio(&cfg, context_policy);
+    let compaction_authority = compaction_authority_name(context_policy);
+
+    let triggers = if let Some(policy) = context_policy {
+        match policy.compaction_authority {
+            MoonContextCompactionAuthority::Moon => {
+                if usage.usage_ratio >= policy.compaction_start_ratio
+                    && (is_cooldown_ready(
+                        unified_layer1_last_trigger_epoch(&state),
+                        usage.captured_at_epoch_secs,
+                        cfg.watcher.cooldown_secs,
+                    ) || usage.usage_ratio >= policy.compaction_emergency_ratio)
+                {
+                    vec![TriggerKind::Archive, TriggerKind::Compaction]
+                } else {
+                    Vec::new()
+                }
+            }
+            MoonContextCompactionAuthority::Openclaw => Vec::new(),
+        }
+    } else {
+        evaluate(&cfg, &state, &usage)
+    };
     let trigger_names = triggers
         .iter()
         .map(|t| match t {
@@ -729,12 +780,107 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
     let mut compaction_targets = Vec::<SessionUsageSnapshot>::new();
     let mut compaction_notes = Vec::<String>::new();
     let mut compaction_has_archivable_targets = false;
+    let mut cooldown_gate_handled_during_selection = false;
 
     if let Some(note) = usage_batch_note {
         compaction_notes.push(note);
     }
 
-    if usage.provider == "openclaw" {
+    if let Some(policy) = context_policy {
+        if matches!(
+            policy.compaction_authority,
+            MoonContextCompactionAuthority::Openclaw
+        ) {
+            compaction_result = Some("skipped reason=authority-openclaw".to_string());
+        } else {
+            cooldown_gate_handled_during_selection = true;
+            let mut candidate_sessions = Vec::<SessionUsageSnapshot>::new();
+            if usage.provider == "openclaw" {
+                if let Some(batch) = &usage_batch {
+                    candidate_sessions = batch
+                        .sessions
+                        .iter()
+                        .filter(|s| is_compaction_channel_session(&s.session_id))
+                        .cloned()
+                        .collect();
+                    let observed = candidate_sessions
+                        .iter()
+                        .map(|s| s.session_id.clone())
+                        .collect::<BTreeSet<_>>();
+                    state
+                        .compaction_hysteresis_active
+                        .retain(|session_key, _| observed.contains(session_key));
+                } else if is_compaction_channel_session(&usage.session_id) {
+                    candidate_sessions.push(usage.clone());
+                }
+            } else if is_compaction_channel_session(&usage.session_id) {
+                candidate_sessions.push(usage.clone());
+            }
+
+            let mut blocked_hysteresis = 0usize;
+            let mut blocked_cooldown = 0usize;
+            let mut cleared_hysteresis = 0usize;
+            let mut bypassed_cooldown = 0usize;
+            for candidate in candidate_sessions {
+                let hysteresis_active = state
+                    .compaction_hysteresis_active
+                    .contains_key(&candidate.session_id);
+                let decision = evaluate_context_compaction_candidate(
+                    candidate.usage_ratio,
+                    policy.compaction_start_ratio,
+                    policy.compaction_emergency_ratio,
+                    policy.compaction_recover_ratio,
+                    compaction_cooldown_ready,
+                    hysteresis_active,
+                );
+                if decision.clear_hysteresis {
+                    cleared_hysteresis += 1;
+                    state
+                        .compaction_hysteresis_active
+                        .remove(&candidate.session_id);
+                    continue;
+                }
+                if decision.should_compact {
+                    if decision.activate_hysteresis {
+                        state
+                            .compaction_hysteresis_active
+                            .entry(candidate.session_id.clone())
+                            .or_insert(usage.captured_at_epoch_secs);
+                    }
+                    if decision.bypassed_cooldown {
+                        bypassed_cooldown += 1;
+                    }
+                    compaction_targets.push(candidate);
+                    continue;
+                }
+                if hysteresis_active {
+                    blocked_hysteresis += 1;
+                } else if candidate.usage_ratio >= policy.compaction_start_ratio
+                    && !compaction_cooldown_ready
+                {
+                    blocked_cooldown += 1;
+                }
+            }
+            compaction_notes.push(format!(
+                "policy=start_ratio={:.4} emergency_ratio={:.4} recover_ratio={:.4}",
+                policy.compaction_start_ratio,
+                policy.compaction_emergency_ratio,
+                policy.compaction_recover_ratio
+            ));
+            if cleared_hysteresis > 0 {
+                compaction_notes.push(format!("hysteresis_cleared={cleared_hysteresis}"));
+            }
+            if blocked_hysteresis > 0 {
+                compaction_notes.push(format!("hysteresis_blocked={blocked_hysteresis}"));
+            }
+            if blocked_cooldown > 0 {
+                compaction_notes.push(format!("cooldown_blocked={blocked_cooldown}"));
+            }
+            if bypassed_cooldown > 0 {
+                compaction_notes.push(format!("cooldown_bypassed={bypassed_cooldown}"));
+            }
+        }
+    } else if usage.provider == "openclaw" {
         if let Some(batch) = &usage_batch {
             compaction_targets = batch
                 .sessions
@@ -824,7 +970,10 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
         archive_out = Some(archive);
     }
 
-    if !compaction_targets.is_empty() && !compaction_cooldown_ready {
+    if !compaction_targets.is_empty()
+        && !compaction_cooldown_ready
+        && !cooldown_gate_handled_during_selection
+    {
         let skip_note = format!(
             "skipped reason=cooldown targets={} cooldown_secs={}",
             compaction_targets.len(),
@@ -1001,7 +1150,7 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
 
         audit::append_event(&paths, "compaction", status, &compact_result)?;
         compaction_result = Some(compact_result);
-    } else if !compaction_notes.is_empty() {
+    } else if compaction_result.is_none() && !compaction_notes.is_empty() {
         audit::append_event(
             &paths,
             "compaction",
@@ -1545,7 +1694,10 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
         state_file: file.display().to_string(),
         heartbeat_epoch_secs: state.last_heartbeat_epoch_secs,
         poll_interval_secs: cfg.watcher.poll_interval_secs,
-        trigger_threshold: cfg.thresholds.trigger_ratio,
+        trigger_threshold: effective_trigger_threshold,
+        compaction_authority,
+        compaction_emergency_ratio: context_policy.map(|policy| policy.compaction_emergency_ratio),
+        compaction_recover_ratio: context_policy.map(|policy| policy.compaction_recover_ratio),
         distill_mode: cfg.distill.mode.clone(),
         distill_idle_secs: cfg.distill.idle_secs,
         distill_max_per_cycle: cfg.distill.max_per_cycle,

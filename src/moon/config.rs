@@ -95,6 +95,56 @@ impl Default for MoonRetentionConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MoonContextWindowMode {
+    #[default]
+    Inherit,
+    Fixed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MoonContextPruneMode {
+    #[default]
+    Disabled,
+    Guarded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MoonContextCompactionAuthority {
+    #[default]
+    Moon,
+    Openclaw,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MoonContextConfig {
+    pub window_mode: MoonContextWindowMode,
+    pub window_tokens: Option<u64>,
+    pub prune_mode: MoonContextPruneMode,
+    pub compaction_authority: MoonContextCompactionAuthority,
+    pub compaction_start_ratio: f64,
+    pub compaction_emergency_ratio: f64,
+    pub compaction_recover_ratio: f64,
+}
+
+impl Default for MoonContextConfig {
+    fn default() -> Self {
+        Self {
+            window_mode: MoonContextWindowMode::Inherit,
+            window_tokens: None,
+            prune_mode: MoonContextPruneMode::Disabled,
+            compaction_authority: MoonContextCompactionAuthority::Moon,
+            compaction_start_ratio: 0.78,
+            compaction_emergency_ratio: 0.90,
+            compaction_recover_ratio: 0.65,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MoonConfig {
     pub thresholds: MoonThresholds,
@@ -102,6 +152,7 @@ pub struct MoonConfig {
     pub inbound_watch: MoonInboundWatchConfig,
     pub distill: MoonDistillConfig,
     pub retention: MoonRetentionConfig,
+    pub context: Option<MoonContextConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -111,6 +162,7 @@ struct PartialMoonConfig {
     inbound_watch: Option<MoonInboundWatchConfig>,
     distill: Option<MoonDistillConfig>,
     retention: Option<MoonRetentionConfig>,
+    context: Option<MoonContextConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -222,6 +274,46 @@ fn validate(cfg: &MoonConfig) -> Result<()> {
             "invalid retention windows: require warm_days < cold_days"
         ));
     }
+    if let Some(context) = &cfg.context {
+        if matches!(context.window_mode, MoonContextWindowMode::Fixed) {
+            let Some(window_tokens) = context.window_tokens else {
+                return Err(anyhow!(
+                    "invalid context config: window_tokens is required when window_mode=fixed"
+                ));
+            };
+            if window_tokens < 16_000 {
+                return Err(anyhow!(
+                    "invalid context config: window_tokens must be >= 16000 when window_mode=fixed"
+                ));
+            }
+        }
+        if !(context.compaction_start_ratio > 0.0 && context.compaction_start_ratio <= 1.0) {
+            return Err(anyhow!(
+                "invalid context config: require 0 < compaction_start_ratio <= 1.0"
+            ));
+        }
+        if !(context.compaction_emergency_ratio > 0.0 && context.compaction_emergency_ratio <= 1.0)
+        {
+            return Err(anyhow!(
+                "invalid context config: require 0 < compaction_emergency_ratio <= 1.0"
+            ));
+        }
+        if !(context.compaction_recover_ratio >= 0.0 && context.compaction_recover_ratio < 1.0) {
+            return Err(anyhow!(
+                "invalid context config: require 0 <= compaction_recover_ratio < 1.0"
+            ));
+        }
+        if context.compaction_recover_ratio >= context.compaction_start_ratio {
+            return Err(anyhow!(
+                "invalid context config: require compaction_recover_ratio < compaction_start_ratio"
+            ));
+        }
+        if context.compaction_start_ratio > context.compaction_emergency_ratio {
+            return Err(anyhow!(
+                "invalid context config: require compaction_start_ratio <= compaction_emergency_ratio"
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -275,6 +367,9 @@ fn merge_file_config(base: &mut MoonConfig) -> Result<()> {
     if let Some(retention) = parsed.retention {
         base.retention = retention;
     }
+    if let Some(context) = parsed.context {
+        base.context = Some(context);
+    }
     Ok(())
 }
 
@@ -316,4 +411,22 @@ pub fn load_config() -> Result<MoonConfig> {
 
     validate(&cfg)?;
     Ok(cfg)
+}
+
+fn has_explicit_context_policy_env() -> bool {
+    for var in ["MOON_CONFIG_PATH", "MOON_HOME"] {
+        if let Ok(v) = env::var(var)
+            && !v.trim().is_empty()
+        {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn load_context_policy_if_explicit_env() -> Result<Option<MoonContextConfig>> {
+    if !has_explicit_context_policy_env() {
+        return Ok(None);
+    }
+    Ok(load_config()?.context)
 }
