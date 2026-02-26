@@ -34,6 +34,7 @@ It optimizes the **OpenClaw** context window by minimizing token usage while ens
     * Capability negotiation against installed QMD (`bounded`, `unbounded-only`, or `missing`)
     * Single-flight lock (`$MOON_LOGS_DIR/moon-embed.lock`) to avoid overlapping embed workers
     * Optional watcher auto-embed (`[embed].mode = "idle"`) without blocking compaction/distill
+    * In `--allow-unbounded` fallback mode, MOON does not mark selected docs as confirmed embedded unless verifiable
 
 ## Recommended Agent Integration
 
@@ -291,6 +292,7 @@ Commands:
 9. `moon-watch [--once|--daemon] [--distill-now]`
 10. `moon-stop`
 11. `moon-embed [--name <collection>] [--max-docs <N>] [--dry-run] [--allow-unbounded] [--watcher-trigger]`
+    - `--allow-unbounded`: run degraded fallback when QMD lacks bounded embed capability; selected docs are not marked confirmed embedded in MOON state
 12. `moon-recall --query <text> [--name <collection>]`
 13. `moon-distill --archive <path> [--session-id <id>] [--allow-large-archive]`
     - default: archives larger than `MOON_DISTILL_CHUNK_BYTES` are auto-distilled in chunks
@@ -352,6 +354,12 @@ Run manual embed sprint:
 moon moon-embed --name history --max-docs 25
 ```
 
+Fallback for older QMD without bounded embed:
+
+```bash
+moon moon-embed --name history --max-docs 25 --allow-unbounded
+```
+
 Recall prior context:
 
 ```bash
@@ -395,6 +403,7 @@ Embed lifecycle windows:
 1. `embed.mode = "manual"`: watcher does not auto-run embed.
 2. `embed.mode = "idle"`: watcher attempts embed after archive/index success and embed idle/cooldown gates.
 3. If QMD lacks bounded embed capability, watcher skips embed in degraded mode and continues the cycle.
+4. Manual `--allow-unbounded` is degraded fallback; MOON does not treat selected docs as confirmed embedded without bounded/verifiable completion.
 
 Archive layout:
 

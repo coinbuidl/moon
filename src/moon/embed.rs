@@ -468,11 +468,15 @@ pub fn run(
         ));
     }
 
-    for doc in &selected {
-        state.embedded_projections.insert(
-            doc.path.display().to_string(),
-            now_epoch.max(doc.mtime_epoch_secs),
-        );
+    let mut embedded_docs = 0usize;
+    if run_bounded {
+        for doc in &selected {
+            state.embedded_projections.insert(
+                doc.path.display().to_string(),
+                now_epoch.max(doc.mtime_epoch_secs),
+            );
+        }
+        embedded_docs = selected_docs;
     }
 
     let existing_projection_paths = docs
@@ -491,7 +495,7 @@ pub fn run(
         capability: probe.capability.as_str().to_string(),
         requested_max_docs: opts.max_docs,
         selected_docs,
-        embedded_docs: selected_docs,
+        embedded_docs,
         pending_before,
         pending_after,
         elapsed_ms: started.elapsed().as_millis(),
