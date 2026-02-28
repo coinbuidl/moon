@@ -1,52 +1,36 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::commands::CommandReport;
+use crate::moon::daemon_lock::{daemon_lock_path, read_daemon_lock_payload};
 use crate::moon::paths::resolve_paths;
+use crate::moon::util::run_command_with_optional_timeout;
 
-const DAEMON_LOCK_FILE: &str = "moon-watch.daemon.lock";
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const STOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const COMMAND_TIMEOUT_SECS: u64 = 10;
 
-fn daemon_lock_path() -> Result<PathBuf> {
+fn lock_path() -> Result<std::path::PathBuf> {
     let paths = resolve_paths()?;
-    Ok(paths.logs_dir.join(DAEMON_LOCK_FILE))
-}
-
-fn read_lock_pid(path: &Path) -> Result<u32> {
-    let raw =
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    let pid_str = raw
-        .lines()
-        .find(|line| !line.trim().is_empty())
-        .map(str::trim)
-        .context("daemon lock file is empty")?;
-    let pid = pid_str
-        .parse::<u32>()
-        .with_context(|| format!("invalid daemon pid in lock file: {pid_str}"))?;
-    Ok(pid)
+    Ok(daemon_lock_path(&paths))
 }
 
 fn process_alive(pid: u32) -> Result<bool> {
-    let status = Command::new("kill")
-        .arg("-0")
-        .arg(pid.to_string())
-        .status()
+    let mut kill_cmd = Command::new("kill");
+    kill_cmd.arg("-0").arg(pid.to_string());
+    let kill_out = run_command_with_optional_timeout(&mut kill_cmd, Some(COMMAND_TIMEOUT_SECS))
         .context("failed to probe process state with `kill -0`")?;
-    if !status.success() {
+    if !kill_out.status.success() {
         return Ok(false);
     }
 
-    let ps_out = Command::new("ps")
-        .arg("-p")
-        .arg(pid.to_string())
-        .arg("-o")
-        .arg("stat=")
-        .output()
+    let mut ps_cmd = Command::new("ps");
+    ps_cmd.arg("-p").arg(pid.to_string()).arg("-o").arg("stat=");
+    let ps_out = run_command_with_optional_timeout(&mut ps_cmd, Some(COMMAND_TIMEOUT_SECS))
         .context("failed to inspect process state with `ps`")?;
 
     if !ps_out.status.success() {
@@ -62,12 +46,13 @@ fn process_alive(pid: u32) -> Result<bool> {
 }
 
 fn process_command_line(pid: u32) -> Result<String> {
-    let output = Command::new("ps")
+    let mut ps_cmd = Command::new("ps");
+    ps_cmd
         .arg("-p")
         .arg(pid.to_string())
         .arg("-o")
-        .arg("command=")
-        .output()
+        .arg("command=");
+    let output = run_command_with_optional_timeout(&mut ps_cmd, Some(COMMAND_TIMEOUT_SECS))
         .context("failed to inspect process command line with `ps`")?;
     if !output.status.success() {
         return Ok(String::new());
@@ -76,13 +61,12 @@ fn process_command_line(pid: u32) -> Result<String> {
 }
 
 fn send_sigterm(pid: u32) -> Result<()> {
-    let status = Command::new("kill")
-        .arg("-TERM")
-        .arg(pid.to_string())
-        .status()
+    let mut kill_cmd = Command::new("kill");
+    kill_cmd.arg("-TERM").arg(pid.to_string());
+    let out = run_command_with_optional_timeout(&mut kill_cmd, Some(COMMAND_TIMEOUT_SECS))
         .context("failed to send SIGTERM with `kill -TERM`")?;
 
-    if status.success() {
+    if out.status.success() {
         return Ok(());
     }
 
@@ -107,7 +91,7 @@ fn cleanup_lock_file(lock_path: &Path, report: &mut CommandReport) {
 
 pub fn run() -> Result<CommandReport> {
     let mut report = CommandReport::new("moon-stop");
-    let lock_path = daemon_lock_path()?;
+    let lock_path = lock_path()?;
     report.detail(format!("daemon_lock={}", lock_path.display()));
 
     if !lock_path.exists() {
@@ -115,16 +99,22 @@ pub fn run() -> Result<CommandReport> {
         return Ok(report);
     }
 
-    let pid = match read_lock_pid(&lock_path) {
-        Ok(pid) => pid,
+    let paths = resolve_paths()?;
+    let payload = match read_daemon_lock_payload(&paths) {
+        Ok(Some(payload)) => payload,
+        Ok(None) => {
+            report.detail("moon watcher daemon already stopped (lock payload missing)".to_string());
+            return Ok(report);
+        }
         Err(err) => {
             report.issue(format!(
-                "failed to read daemon pid from lock {}: {err:#}",
+                "failed to read daemon lock {}: {err:#}",
                 lock_path.display()
             ));
             return Ok(report);
         }
     };
+    let pid = payload.pid;
     report.detail(format!("daemon_pid={pid}"));
 
     if !process_alive(pid)? {

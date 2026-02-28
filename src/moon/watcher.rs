@@ -8,6 +8,7 @@ use crate::moon::config::{
     MoonContextCompactionAuthority, MoonContextConfig, MoonRetentionConfig, load_config,
 };
 use crate::moon::continuity::{ContinuityOutcome, build_continuity};
+use crate::moon::daemon_lock::{DaemonLockPayload, daemon_lock_path, parse_daemon_lock_payload};
 use crate::moon::distill::{
     DistillInput, DistillOutput, archive_file_size, distill_chunk_bytes, load_archive_excerpt,
     run_chunked_archive_distillation, run_distillation,
@@ -20,15 +21,15 @@ use crate::moon::session_usage::{
     SessionUsageSnapshot, collect_openclaw_usage_batch, collect_usage,
 };
 use crate::moon::snapshot::latest_session_file;
-use crate::moon::state::{load, save};
+use crate::moon::state::{load, save, state_file_path};
 use crate::moon::thresholds::{TriggerKind, evaluate, evaluate_context_compaction_candidate};
 use crate::moon::warn::{self, WarnEvent};
 use crate::openclaw::gateway;
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use chrono::{Local, TimeZone, Utc};
 use chrono_tz::Tz;
 use fs2::FileExt;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -44,14 +45,6 @@ use std::time::{Duration, Instant};
 const DEFAULT_HIGH_TOKEN_ALERT_THRESHOLD: u64 = 1_000_000;
 const MAX_HIGH_TOKEN_ALERT_SESSIONS: usize = 5;
 const BUILD_UUID: &str = env!("BUILD_UUID");
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct DaemonLockPayload {
-    pid: u32,
-    started_at_epoch_secs: u64,
-    build_uuid: String,
-    moon_home: String,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DistillTriggerMode {
@@ -76,6 +69,7 @@ impl DistillTriggerMode {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WatchRunOptions {
     pub force_distill_now: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -622,7 +616,7 @@ fn acquire_daemon_lock() -> Result<File> {
     fs::create_dir_all(&paths.logs_dir)
         .with_context(|| format!("failed to create {}", paths.logs_dir.display()))?;
 
-    let lock_path = paths.logs_dir.join("moon-watch.daemon.lock");
+    let lock_path = daemon_lock_path(&paths);
     let mut lock_file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -650,7 +644,7 @@ fn acquire_daemon_lock() -> Result<File> {
             // Lock is held. Check if it's stale or mismatched.
             let raw = fs::read_to_string(&lock_path).ok();
             let payload: Option<DaemonLockPayload> =
-                raw.and_then(|r| serde_json::from_str(&r).ok());
+                raw.as_deref().and_then(parse_daemon_lock_payload);
 
             if let Some(p) = payload {
                 let pid_alive = crate::moon::util::pid_alive(p.pid);
@@ -722,7 +716,15 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
     // Legacy field retained for backward-compatible state parsing; no longer used
     // for compaction trigger decisions.
     state.compaction_hysteresis_active.clear();
-    let inbound_watch = inbound_watch::process(&paths, &cfg, &mut state)?;
+    let inbound_watch = if run_opts.dry_run {
+        InboundWatchOutcome {
+            enabled: cfg.inbound_watch.enabled,
+            watched_paths: cfg.inbound_watch.watch_paths.clone(),
+            ..InboundWatchOutcome::default()
+        }
+    } else {
+        inbound_watch::process(&paths, &cfg, &mut state)?
+    };
 
     let mut usage_batch_note = None;
     let usage_batch = match collect_openclaw_usage_batch() {
@@ -925,6 +927,54 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
             }
             Err(err) => compaction_notes.push(format!("source_map failed: {err:#}")),
         }
+    }
+
+    if run_opts.dry_run {
+        if compaction_result.is_none() {
+            compaction_result = if compaction_targets.is_empty() {
+                Some("dry-run: no compaction targets selected".to_string())
+            } else {
+                Some(format!(
+                    "dry-run: would run compaction for {} target(s)",
+                    compaction_targets.len()
+                ))
+            };
+        } else if let Some(existing) = compaction_result.take() {
+            compaction_result = Some(format!("dry-run: {existing}"));
+        }
+
+        embed_result = Some("dry-run: embed skipped".to_string());
+        archive_retention_result = Some("dry-run: archive retention skipped".to_string());
+        let state_file = state_file_path(&paths);
+
+        return Ok(WatchCycleOutcome {
+            state_file: state_file.display().to_string(),
+            heartbeat_epoch_secs: state.last_heartbeat_epoch_secs,
+            poll_interval_secs: cfg.watcher.poll_interval_secs,
+            trigger_threshold: effective_trigger_threshold,
+            compaction_authority,
+            compaction_emergency_ratio: context_policy
+                .map(|policy| policy.compaction_emergency_ratio),
+            compaction_recover_ratio: context_policy.map(|policy| policy.compaction_recover_ratio),
+            distill_mode: cfg.distill.mode.clone(),
+            distill_idle_secs: cfg.distill.idle_secs,
+            distill_max_per_cycle: cfg.distill.max_per_cycle,
+            embed_mode: cfg.embed.mode.clone(),
+            embed_idle_secs: cfg.embed.idle_secs,
+            embed_max_docs_per_cycle: cfg.embed.max_docs_per_cycle,
+            retention_active_days: cfg.retention.active_days,
+            retention_warm_days: cfg.retention.warm_days,
+            retention_cold_days: cfg.retention.cold_days,
+            usage,
+            triggers: trigger_names,
+            inbound_watch,
+            archive: None,
+            compaction_result,
+            distill: None,
+            embed_result,
+            continuity: None,
+            archive_retention_result,
+        });
     }
 
     if let Some(archive) =
@@ -1692,16 +1742,15 @@ pub fn run_daemon() -> Result<()> {
             break;
         }
 
-        let cycle_result = std::panic::catch_unwind(|| {
-            run_once_with_options(WatchRunOptions::default())
-        });
+        let cycle_result =
+            std::panic::catch_unwind(|| run_once_with_options(WatchRunOptions::default()));
 
         match cycle_result {
             Ok(Ok(cycle)) => {
                 consecutive_failures = 0;
                 consecutive_panics = 0;
                 let sleep_for_secs = cycle.poll_interval_secs.max(1);
-                
+
                 // Responsive sleep: check shutdown flag every second.
                 for _ in 0..sleep_for_secs {
                     if shutdown.load(Ordering::SeqCst) {
@@ -1736,7 +1785,7 @@ pub fn run_daemon() -> Result<()> {
                     "moon watcher cycle failed; retrying in {}s: {err:#}",
                     retry_in_secs
                 );
-                
+
                 for _ in 0..retry_in_secs {
                     if shutdown.load(Ordering::SeqCst) {
                         break;

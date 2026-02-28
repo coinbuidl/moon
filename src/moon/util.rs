@@ -1,7 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::process::{Command, Output};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+pub const DEFAULT_EXTERNAL_COMMAND_TIMEOUT_SECS: u64 = 120;
 
 /// Return the current Unix epoch in seconds.
 ///
@@ -32,11 +34,17 @@ pub fn pid_alive(pid: u32) -> bool {
         // If we really need to check another process's health, we'd use winapi or tasklist.
         true
     } else {
-        let Ok(status) = Command::new("kill").arg("-0").arg(pid.to_string()).status() else {
+        let mut cmd = Command::new("kill");
+        cmd.arg("-0").arg(pid.to_string());
+        let Ok(output) = run_command_with_optional_timeout(&mut cmd, Some(2)) else {
             return false;
         };
-        status.success()
+        output.status.success()
     }
+}
+
+pub fn run_command_with_timeout(cmd: &mut Command) -> Result<Output> {
+    run_command_with_optional_timeout(cmd, Some(DEFAULT_EXTERNAL_COMMAND_TIMEOUT_SECS))
 }
 
 pub fn run_command_with_optional_timeout(

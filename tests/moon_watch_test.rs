@@ -209,6 +209,50 @@ fn moon_watch_once_uses_moon_state_file_override() {
 
 #[test]
 #[cfg(not(windows))]
+fn moon_watch_once_dry_run_skips_state_and_mutations() {
+    let tmp = tempdir().expect("tempdir");
+    let moon_home = tmp.path().join("moon");
+    let sessions_dir = tmp.path().join("sessions");
+    fs::create_dir_all(moon_home.join("archives")).expect("mkdir archives");
+    fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
+    fs::create_dir_all(moon_home.join("moon/logs")).expect("mkdir logs");
+    fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
+    fs::write(
+        sessions_dir.join("s1.json"),
+        "{\"decision\":\"use moon\"}\n",
+    )
+    .expect("write session");
+
+    let qmd = tmp.path().join("qmd");
+    write_fake_qmd(&qmd);
+    let openclaw = tmp.path().join("openclaw");
+    write_fake_openclaw(&openclaw);
+
+    assert_cmd::cargo::cargo_bin_cmd!("moon")
+        .current_dir(tmp.path())
+        .env("MOON_HOME", &moon_home)
+        .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
+        .env("QMD_BIN", &qmd)
+        .env("OPENCLAW_BIN", &openclaw)
+        .arg("moon-watch")
+        .arg("--once")
+        .arg("--dry-run")
+        .assert()
+        .success()
+        .stdout(contains("dry_run=true"));
+
+    assert!(
+        !moon_home.join("moon/state/moon_state.json").exists(),
+        "dry-run should not write state file"
+    );
+    assert!(
+        !moon_home.join("archives/ledger.jsonl").exists(),
+        "dry-run should not write archive ledger"
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
 fn moon_watch_once_triggers_pipeline_with_low_thresholds() {
     let tmp = tempdir().expect("tempdir");
     let moon_home = tmp.path().join("moon");

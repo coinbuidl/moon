@@ -50,6 +50,8 @@ Failure:
 Policy:
 1. Return non-zero from one-shot run.
 2. In daemon mode, log and retry next cycle unless config is permanently invalid.
+3. Panic guard wraps each cycle (`catch_unwind`): reset panic counter on any successful cycle; halt daemon after 3 consecutive panics (`DAEMON_PANIC_HALT`).
+4. Corrupt state JSON auto-recovers by starting with defaults; best-effort corrupt backup is attempted first.
 
 ## Session Usage Provider
 
@@ -131,3 +133,13 @@ Policy:
 1. Watcher mode: warn and continue cycle in degraded mode.
 2. Manual mode: return `ok=false` on lock/capability/command failures (no degraded unbounded fallback flags).
 3. Always append embed audit detail.
+
+## CLI Workspace Boundary
+
+Failure:
+1. Mutating command executed outside expected workspace boundary.
+
+Policy:
+1. Return error with structured code `E004_CWD_INVALID`.
+2. Diagnostic commands remain runnable from any directory.
+3. Operator may bypass with global `--allow-out-of-bounds`.

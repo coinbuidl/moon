@@ -228,9 +228,9 @@ impl SessionUsageProvider for OpenClawUsageProvider {
     fn collect(&self, _paths: &MoonPaths) -> Result<SessionUsageSnapshot> {
         let bin = resolve_openclaw_bin_path()?;
         let args = openclaw_usage_args();
-        let output = Command::new(&bin)
-            .args(&args)
-            .output()
+        let mut cmd = Command::new(&bin);
+        cmd.args(&args);
+        let output = crate::moon::util::run_command_with_timeout(&mut cmd)
             .with_context(|| format!("failed to run `{}`", bin.display()))?;
 
         if !output.status.success() {
@@ -254,9 +254,9 @@ pub fn collect_usage(paths: &MoonPaths) -> Result<SessionUsageSnapshot> {
 pub fn collect_openclaw_usage_batch() -> Result<OpenClawUsageBatch> {
     let bin = resolve_openclaw_bin_path()?;
     let args = openclaw_sessions_args();
-    let output = Command::new(&bin)
-        .args(&args)
-        .output()
+    let mut cmd = Command::new(&bin);
+    cmd.args(&args);
+    let output = crate::moon::util::run_command_with_timeout(&mut cmd)
         .with_context(|| format!("failed to run `{}`", bin.display()))?;
 
     if !output.status.success() {

@@ -4,6 +4,13 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+pub const SECRET_ENV_KEYS: [&str; 4] = [
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "AI_API_KEY",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoonThresholds {
     pub trigger_ratio: f64,
@@ -367,7 +374,7 @@ fn validate(cfg: &MoonConfig) -> Result<()> {
     Ok(())
 }
 
-fn resolve_config_path() -> Option<PathBuf> {
+pub fn resolve_config_path() -> Option<PathBuf> {
     if let Ok(custom) = env::var("MOON_CONFIG_PATH") {
         let trimmed = custom.trim();
         if !trimmed.is_empty() {
@@ -479,17 +486,32 @@ pub fn load_config() -> Result<MoonConfig> {
 }
 
 pub fn mask_secret(secret: &str) -> String {
-    if secret.is_empty() {
-        return String::new();
+    let trimmed = secret.trim();
+    if trimmed.is_empty() {
+        return "[UNSET]".to_string();
     }
-    if secret.len() <= 8 {
-        return "****".to_string();
+
+    let chars = trimmed.chars().collect::<Vec<_>>();
+    if chars.len() < 8 {
+        return "[SET]".to_string();
     }
-    format!("{}***{}", &secret[..4], &secret[secret.len() - 4..])
+
+    let first3 = chars.iter().take(3).collect::<String>();
+    let last4 = chars[chars.len().saturating_sub(4)..]
+        .iter()
+        .collect::<String>();
+    format!("{first3}...{last4}")
 }
 
-fn audit_env_vars() {
-    let allowlist = [
+pub fn masked_env_secret(var: &str) -> String {
+    match env::var(var) {
+        Ok(v) => mask_secret(&v),
+        Err(_) => "[UNSET]".to_string(),
+    }
+}
+
+fn env_allowlist() -> &'static [&'static str] {
+    &[
         "MOON_HOME",
         "MOON_CONFIG_PATH",
         "MOON_STATE_FILE",
@@ -524,11 +546,65 @@ fn audit_env_vars() {
         "MOON_EMBED_MAX_CYCLE_SECS",
         "MOON_HIGH_TOKEN_ALERT_THRESHOLD",
         "MOON_DISTILL_CHUNK_TRIGGER_BYTES",
-    ];
+    ]
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    if left == right {
+        return 0;
+    }
+    if left.is_empty() {
+        return right.chars().count();
+    }
+    if right.is_empty() {
+        return left.chars().count();
+    }
+
+    let left_chars = left.chars().collect::<Vec<_>>();
+    let right_chars = right.chars().collect::<Vec<_>>();
+    let mut prev_row = (0..=right_chars.len()).collect::<Vec<_>>();
+    let mut curr_row = vec![0usize; right_chars.len() + 1];
+
+    for (i, lc) in left_chars.iter().enumerate() {
+        curr_row[0] = i + 1;
+        for (j, rc) in right_chars.iter().enumerate() {
+            let cost = if lc == rc { 0 } else { 1 };
+            curr_row[j + 1] = std::cmp::min(
+                std::cmp::min(curr_row[j] + 1, prev_row[j + 1] + 1),
+                prev_row[j] + cost,
+            );
+        }
+        prev_row.clone_from_slice(&curr_row);
+    }
+
+    prev_row[right_chars.len()]
+}
+
+fn nearest_allowed_env_key<'a>(candidate: &str, allowlist: &'a [&str]) -> Option<&'a str> {
+    let mut best: Option<(usize, &str)> = None;
+    for allowed in allowlist {
+        let distance = levenshtein_distance(candidate, allowed);
+        match best {
+            Some((best_distance, _)) if distance >= best_distance => {}
+            _ => best = Some((distance, allowed)),
+        }
+    }
+    let (distance, key) = best?;
+    if distance <= 4 { Some(key) } else { None }
+}
+
+fn audit_env_vars() {
+    let allowlist = env_allowlist();
 
     for (key, _) in env::vars() {
         if key.starts_with("MOON_") && !allowlist.contains(&key.as_str()) {
-            eprintln!("WARN: unrecognized environment variable: {key}");
+            if let Some(suggestion) = nearest_allowed_env_key(&key, allowlist) {
+                eprintln!(
+                    "WARN: unrecognized environment variable: {key}. Did you mean `{suggestion}`?"
+                );
+            } else {
+                eprintln!("WARN: unrecognized environment variable: {key}");
+            }
         }
     }
 }
@@ -549,4 +625,20 @@ pub fn load_context_policy_if_explicit_env() -> Result<Option<MoonContextConfig>
         return Ok(None);
     }
     Ok(load_config()?.context)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mask_secret;
+
+    #[test]
+    fn mask_secret_unset_and_short_values() {
+        assert_eq!(mask_secret(""), "[UNSET]");
+        assert_eq!(mask_secret("short"), "[SET]");
+    }
+
+    #[test]
+    fn mask_secret_keeps_prefix_and_suffix() {
+        assert_eq!(mask_secret("sk-1234567890abcdef"), "sk-...cdef");
+    }
 }

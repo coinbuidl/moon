@@ -61,6 +61,19 @@ Rules:
 3. `daily` mode attempts layer-2 distillation once per residential day after the latest archive has been idle for `idle_secs`.
 4. `manual` mode disables automatic layer-2 distillation; manual trigger is `moon-watch --once --distill-now`.
 
+## DaemonLockPayload
+
+Fields:
+1. `pid: u32`
+2. `started_at_epoch_secs: u64`
+3. `build_uuid: String`
+4. `moon_home: String`
+
+Rules:
+1. Lock file path is `$MOON_LOGS_DIR/moon-watch.daemon.lock`.
+2. Payload is JSON; legacy single-line PID lock payloads remain backward compatible for readers.
+3. Mutating commands may use `moon_home` to enforce workspace boundary checks.
+
 ## ContinuityMap
 
 Fields:

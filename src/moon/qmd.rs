@@ -58,8 +58,7 @@ fn is_existing_collection_error(stdout: &str, stderr: &str) -> bool {
 
 fn collection_pattern(qmd_bin: &Path, collection_name: &str) -> Result<Option<String>> {
     let mut cmd = Command::new(qmd_bin);
-    cmd.arg("collection")
-        .arg("list");
+    cmd.arg("collection").arg("list");
     let output = crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
         .with_context(|| format!("failed to run `{}`", qmd_bin.display()))?;
     if !output.status.success() {
@@ -125,11 +124,10 @@ pub fn collection_add_or_update(
             .is_some_and(|pattern| pattern != ARCHIVE_COLLECTION_MASK)
         {
             let mut cmd = Command::new(&bin);
-            cmd.arg("collection")
-                .arg("remove")
-                .arg(collection_name);
-            let remove_output = crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
-                .with_context(|| format!("failed to run `{}`", bin.display()))?;
+            cmd.arg("collection").arg("remove").arg(collection_name);
+            let remove_output =
+                crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
+                    .with_context(|| format!("failed to run `{}`", bin.display()))?;
             if !remove_output.status.success() {
                 anyhow::bail!(
                     "qmd collection remove failed while recreating {}\nstdout: {}\nstderr: {}",
@@ -147,8 +145,9 @@ pub fn collection_add_or_update(
                 .arg(collection_name)
                 .arg("--mask")
                 .arg(ARCHIVE_COLLECTION_MASK);
-            let recreate_output = crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
-                .with_context(|| format!("failed to run `{}`", bin.display()))?;
+            let recreate_output =
+                crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
+                    .with_context(|| format!("failed to run `{}`", bin.display()))?;
             if recreate_output.status.success() {
                 return Ok(CollectionSyncResult::Recreated);
             }
@@ -163,8 +162,9 @@ pub fn collection_add_or_update(
 
         let mut cmd = Command::new(&bin);
         cmd.arg("update");
-        let update_output = crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
-            .with_context(|| format!("failed to run `{}`", bin.display()))?;
+        let update_output =
+            crate::moon::util::run_command_with_optional_timeout(&mut cmd, Some(30))
+                .with_context(|| format!("failed to run `{}`", bin.display()))?;
 
         if update_output.status.success() {
             return Ok(CollectionSyncResult::Updated);
@@ -331,5 +331,3 @@ pub fn output_indicates_embed_status_failed(stdout: &str, stderr: &str) -> bool 
         .and_then(Value::as_bool)
         .is_some_and(|ok| !ok)
 }
-
-

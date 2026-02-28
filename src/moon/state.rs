@@ -71,8 +71,8 @@ pub fn load(paths: &MoonPaths) -> Result<MoonState> {
         return Ok(MoonState::default());
     }
 
-    let raw = fs::read_to_string(&file)
-        .with_context(|| format!("failed to read {}", file.display()))?;
+    let raw =
+        fs::read_to_string(&file).with_context(|| format!("failed to read {}", file.display()))?;
 
     let mut parsed: MoonState = match serde_json::from_str(&raw) {
         Ok(s) => s,

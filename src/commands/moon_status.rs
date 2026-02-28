@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::commands::CommandReport;
+use crate::moon::config::{SECRET_ENV_KEYS, masked_env_secret};
 use crate::moon::paths::resolve_paths;
 use crate::moon::state::state_file_path;
 
@@ -20,6 +21,9 @@ pub fn run() -> Result<CommandReport> {
     ));
     report.detail(format!("qmd_bin={}", paths.qmd_bin.display()));
     report.detail(format!("qmd_db={}", paths.qmd_db.display()));
+    for key in SECRET_ENV_KEYS {
+        report.detail(format!("secret.{key}={}", masked_env_secret(key)));
+    }
 
     if !paths.archives_dir.exists() {
         report.issue(format!(

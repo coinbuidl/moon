@@ -42,7 +42,7 @@ fn try_rollover() -> Result<String> {
         if parts.len() > 1 {
             cmd.args(&parts[1..]);
         }
-        let out = cmd.output()?;
+        let out = crate::moon::util::run_command_with_timeout(&mut cmd)?;
         if !out.status.success() {
             anyhow::bail!(
                 "rollover command failed: {}",
@@ -58,9 +58,9 @@ fn try_rollover() -> Result<String> {
         return Ok(format!("external-{}", now_epoch_secs()?));
     }
 
-    let out = Command::new("openclaw")
-        .args(["sessions", "new", "--json"])
-        .output();
+    let mut cmd = Command::new("openclaw");
+    cmd.args(["sessions", "new", "--json"]);
+    let out = crate::moon::util::run_command_with_timeout(&mut cmd);
     match out {
         Ok(o) if o.status.success() => {
             let stdout = String::from_utf8_lossy(&o.stdout).to_string();

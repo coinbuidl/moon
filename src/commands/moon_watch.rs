@@ -8,6 +8,7 @@ pub struct MoonWatchOptions {
     pub once: bool,
     pub daemon: bool,
     pub distill_now: bool,
+    pub dry_run: bool,
 }
 
 pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
@@ -19,6 +20,10 @@ pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
     }
     if opts.daemon && opts.distill_now {
         report.issue("invalid flags: --distill-now is only valid with --once");
+        return Ok(report);
+    }
+    if opts.daemon && opts.dry_run {
+        report.issue("invalid flags: --dry-run is only valid with --once");
         return Ok(report);
     }
 
@@ -51,14 +56,18 @@ pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
         return Ok(report);
     }
 
-    let cycle = if opts.distill_now {
+    let cycle = if opts.distill_now || opts.dry_run {
         watcher::run_once_with_options(watcher::WatchRunOptions {
-            force_distill_now: true,
+            force_distill_now: opts.distill_now,
+            dry_run: opts.dry_run,
         })?
     } else {
         watcher::run_once()?
     };
     report.detail("moon watcher cycle completed");
+    if opts.dry_run {
+        report.detail("dry_run=true".to_string());
+    }
     report.detail(format!("state_file={}", cycle.state_file));
     report.detail(format!(
         "heartbeat_epoch_secs={}",

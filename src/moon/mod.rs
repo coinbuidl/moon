@@ -3,6 +3,7 @@ pub mod audit;
 pub mod channel_archive_map;
 pub mod config;
 pub mod continuity;
+pub mod daemon_lock;
 pub mod distill;
 pub mod embed;
 pub mod inbound_watch;

@@ -121,9 +121,7 @@ pub fn config_snapshot(root: &Value, plugin_id: &str) -> StatusSnapshot {
 }
 
 pub fn run() -> Result<CommandReport> {
-    eprintln!("DEBUG: status::run started");
     let paths = resolve_paths()?;
-    eprintln!("DEBUG: paths resolved: {:?}", paths);
     let mut report = CommandReport::new("status");
 
     let cfg = config::read_config_value(&paths)?;
@@ -141,9 +139,18 @@ pub fn run() -> Result<CommandReport> {
     report.detail(format!("plugin_dir={}", plugin_dir_disp.trim()));
 
     report.detail(format!("plugin_present_on_disk={}", verify.present_on_disk));
-    report.detail(format!("plugin_listed_by_openclaw={}", verify.listed_by_openclaw));
-    report.detail(format!("plugin_loaded_by_openclaw={}", verify.loaded_by_openclaw));
-    report.detail(format!("plugin_assets_match_local={}", verify.assets_match_local));
+    report.detail(format!(
+        "plugin_listed_by_openclaw={}",
+        verify.listed_by_openclaw
+    ));
+    report.detail(format!(
+        "plugin_loaded_by_openclaw={}",
+        verify.loaded_by_openclaw
+    ));
+    report.detail(format!(
+        "plugin_assets_match_local={}",
+        verify.assets_match_local
+    ));
     report.detail(format!("plugin_enabled={}", snapshot.plugin_enabled));
 
     if let Some(s) = &install_snapshot.source {
@@ -156,20 +163,50 @@ pub fn run() -> Result<CommandReport> {
         report.detail(format!("install_record.installPath={}", s.trim()));
     }
 
-    if let Some(v) = path_value(&cfg, &["plugins", "entries", &paths.plugin_id, "config", "maxTokens"]) {
+    if let Some(v) = path_value(
+        &cfg,
+        &[
+            "plugins",
+            "entries",
+            &paths.plugin_id,
+            "config",
+            "maxTokens",
+        ],
+    ) {
         report.detail(format!("plugin_config.maxTokens={}", v.to_string().trim()));
     }
-    if let Some(v) = path_value(&cfg, &["plugins", "entries", &paths.plugin_id, "config", "maxChars"]) {
+    if let Some(v) = path_value(
+        &cfg,
+        &["plugins", "entries", &paths.plugin_id, "config", "maxChars"],
+    ) {
         report.detail(format!("plugin_config.maxChars={}", v.to_string().trim()));
     }
-    if let Some(v) = path_value(&cfg, &["plugins", "entries", &paths.plugin_id, "config", "maxRetainedBytes"]) {
-        report.detail(format!("plugin_config.maxRetainedBytes={}", v.to_string().trim()));
+    if let Some(v) = path_value(
+        &cfg,
+        &[
+            "plugins",
+            "entries",
+            &paths.plugin_id,
+            "config",
+            "maxRetainedBytes",
+        ],
+    ) {
+        report.detail(format!(
+            "plugin_config.maxRetainedBytes={}",
+            v.to_string().trim()
+        ));
     }
     if let Some(v) = path_value(&cfg, &["agents", "defaults", "contextTokens"]) {
-        report.detail(format!("agents.defaults.contextTokens={}", v.to_string().trim()));
+        report.detail(format!(
+            "agents.defaults.contextTokens={}",
+            v.to_string().trim()
+        ));
     }
     if let Some(v) = path_value(&cfg, &["agents", "defaults", "compaction", "mode"]) {
-        report.detail(format!("agents.defaults.compaction.mode={}", v.to_string().trim()));
+        report.detail(format!(
+            "agents.defaults.compaction.mode={}",
+            v.to_string().trim()
+        ));
     }
     if let Some(policy) = &context_policy {
         report.detail(format!(

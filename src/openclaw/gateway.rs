@@ -42,9 +42,9 @@ pub(crate) fn resolve_openclaw_bin_path() -> Result<PathBuf> {
 
 fn run_openclaw(args: &[&str]) -> Result<Output> {
     let bin = resolve_openclaw_bin_path()?;
-    let out = Command::new(&bin)
-        .args(args)
-        .output()
+    let mut cmd = Command::new(&bin);
+    cmd.args(args);
+    let out = crate::moon::util::run_command_with_timeout(&mut cmd)
         .with_context(|| format!("failed to run `{}` {}", bin.display(), args.join(" ")))?;
     Ok(out)
 }

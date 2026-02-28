@@ -26,6 +26,7 @@ MOON requires a "provenance" registration with OpenClaw to authorize context pru
 1. **Build**: `cargo build --release`
 2. **Install**: `moon install` (This registers the plugin and sets up internal paths).
 3. **Verify**: `moon verify --strict` (Ensure all checks are GREEN).
+4. **Inspect config**: `moon config --show` (confirm resolved runtime values).
 
 ## 3. Dependency Check: qmd
 MOON uses `qmd` for vector indexing and recall.
@@ -36,8 +37,15 @@ MOON uses `qmd` for vector indexing and recall.
 The Watcher is the "brain" of the system. It handles archival, compaction, and distillation.
 
 - **Start Daemon**: `moon moon-watch --daemon`
-- **Check Health**: `moon moon-status`
+- **Check Runtime Paths**: `moon moon-status`
+- **Check Daemon/State Health**: `moon moon-health`
 - **Audit Logs**: Monitor `~/.lilac_metaflora/moon/logs/audit.log` for activity.
+- **Dry-run one cycle safely**: `moon moon-watch --once --dry-run`
+
+Workspace safety:
+
+1. Mutating commands enforce workspace CWD boundaries.
+2. Use global `--allow-out-of-bounds` only when intentionally operating outside the workspace root.
 
 ## 5. Embedding Strategy (Large Backlogs)
 If you have a massive existing session history (e.g., >10,000 chunks):

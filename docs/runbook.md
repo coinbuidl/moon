@@ -13,6 +13,8 @@ cp .env.example .env
 cp moon.toml.example moon.toml
 moon verify --strict
 moon moon-status
+moon moon-health
+moon config --show
 moon moon-watch --once
 ```
 
@@ -37,6 +39,12 @@ Retention windows:
 moon moon-watch --daemon
 ```
 
+## Health Probe
+
+```bash
+moon moon-health
+```
+
 ## Manual Distill
 
 ```bash
@@ -47,6 +55,12 @@ Manual layer-2 queue trigger (same selection logic as watcher):
 
 ```bash
 moon moon-watch --once --distill-now
+```
+
+Dry-run watcher cycle (no state/archive mutations):
+
+```bash
+moon moon-watch --once --dry-run
 ```
 
 ## Recall
@@ -70,6 +84,7 @@ moon moon-index --name history
 5. Archive ledger: `$MOON_ARCHIVES_DIR/ledger.jsonl`
 6. Daily memory: `$MOON_MEMORY_DIR/YYYY-MM-DD.md` (default: `$MOON_HOME/memory/YYYY-MM-DD.md`)
 7. Audit log: `$MOON_LOGS_DIR/audit.log` (default: `$MOON_HOME/moon/logs/audit.log`)
+8. Daemon lock: `$MOON_LOGS_DIR/moon-watch.daemon.lock` (JSON payload includes `pid`, `started_at_epoch_secs`, `build_uuid`, `moon_home`)
 
 ## Troubleshooting
 
@@ -85,3 +100,5 @@ moon moon-index --name history
 4. Session rollover fails:
 - set `MOON_SESSION_ROLLOVER_CMD` to your environment-specific command
 - continuity map still persists with `rollover_ok=false`
+5. Mutating command fails with out-of-bounds error:
+- run from your workspace tree, or use global escape hatch `--allow-out-of-bounds`

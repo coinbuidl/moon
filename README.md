@@ -100,10 +100,14 @@ Query semantics:
    `moon verify --strict` (or `cargo run -- verify --strict`)
 4. Check moon runtime paths:
    `moon moon-status` (or `cargo run -- moon-status`)
-5. Run one watcher cycle:
+5. Check daemon/state health:
+   `moon moon-health` (or `cargo run -- moon-health`)
+6. Inspect resolved runtime config:
+   `moon config --show` (or `cargo run -- config --show`)
+7. Run one watcher cycle:
    `moon moon-watch --once` (or `cargo run -- moon-watch --once`)
-6. Enable daemon mode only after one-shot run is clean.
-7. Install role-scoped skills (`moon-admin`, `moon-subagent`) if your runtime uses `$CODEX_HOME/skills`.
+8. Enable daemon mode only after one-shot run is clean.
+9. Install role-scoped skills (`moon-admin`, `moon-subagent`) if your runtime uses `$CODEX_HOME/skills`.
 
 ## Quick start
 
@@ -115,6 +119,8 @@ cargo install --path .
 moon install
 moon verify --strict
 moon moon-status
+moon moon-health
+moon config --show
 ```
 
 `.env.example` and `moon.toml.example` are templates. Keep them generic; put
@@ -138,6 +144,14 @@ This makes daemon runs resilient when started outside the moon repo working
 directory.
 
 Agent check: ensure `.env` exists in the moon repo folder (`moon/.env`).
+If `.env` is missing at startup, moon logs a warning and continues in
+non-distill/non-embed mode.
+
+Workspace boundary safety:
+
+1. Mutating commands validate CWD against the daemon-recorded workspace (or explicit `MOON_HOME` when no daemon lock is present).
+2. Diagnostic commands (`status`, `moon-status`, `moon-health`, `verify`, `config`) are always allowed from any directory.
+3. Escape hatch: pass global `--allow-out-of-bounds` to bypass CWD enforcement.
 
 OpenClaw binary resolution:
 
@@ -316,6 +330,7 @@ moon <command> [flags]
 Global flag:
 
 1. `--json` outputs machine-readable `CommandReport`
+2. `--allow-out-of-bounds` bypasses workspace CWD lock checks for mutating commands
 
 Commands:
 
@@ -328,13 +343,15 @@ Commands:
 7. `moon-snapshot [--source <path>] [--dry-run]`
 8. `moon-index [--name <collection>] [--dry-run] [--reproject]`
    - `--reproject`: regenerate all projection markdown files using the v2 structured format
-9. `moon-watch [--once|--daemon] [--distill-now]`
+9. `moon-watch [--once|--daemon] [--distill-now] [--dry-run]`
 10. `moon-stop`
 11. `moon-embed [--name <collection>] [--max-docs <N>] [--dry-run] [--watcher-trigger]`
 12. `moon-recall --query <text> [--name <collection>]`
-13. `moon-distill --archive <path> [--session-id <id>] [--allow-large-archive]`
+13. `moon-distill --archive <path> [--session-id <id>] [--allow-large-archive] [--dry-run]`
     - default: archives larger than `MOON_DISTILL_CHUNK_BYTES` are auto-distilled in chunks
     - `--allow-large-archive`: force single-pass distill above the chunk threshold
+14. `config [--show]`
+15. `moon-health`
 
 Exit codes:
 
@@ -404,10 +421,22 @@ Run one watcher cycle:
 moon moon-watch --once
 ```
 
+Dry-run watcher planning cycle (no mutation/state writes):
+
+```bash
+moon moon-watch --once --dry-run
+```
+
 Stop the watcher daemon:
 
 ```bash
 moon moon-stop
+```
+
+Health probe:
+
+```bash
+moon moon-health
 ```
 
 Idle distill selection order:
@@ -449,7 +478,8 @@ Archive layout:
 
 ## Configuration
 
-The CLI autoloads `.env` on startup (if present).
+The CLI autoloads `.env` on startup when available. If no `.env` is found, moon
+logs a warning and continues with defaults/explicit env vars.
 
 Start from:
 
@@ -479,6 +509,13 @@ Most-used `.env` variables:
 19. `MOON_EMBED_MAX_DOCS_PER_CYCLE`
 20. `MOON_EMBED_MIN_PENDING_DOCS`
 21. `MOON_EMBED_MAX_CYCLE_SECS`
+22. `MOON_HEALTH_MAX_CYCLE_AGE_SECS` (health freshness threshold; default `600`)
+
+Config hardening behaviors:
+
+1. Unknown `MOON_*` variables are warned on startup, with typo suggestions when close matches exist.
+2. `moon config --show` prints fully resolved config values (defaults -> `moon.toml` -> env overrides).
+3. Secret env values are masked in diagnostics (`moon-status`, `config --show`).
 
 Primary tuning belongs in `moon.toml`:
 

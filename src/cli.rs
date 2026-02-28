@@ -11,6 +11,9 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    #[arg(long, global = true)]
+    pub allow_out_of_bounds: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -82,6 +85,8 @@ pub struct MoonWatchArgs {
     pub daemon: bool,
     #[arg(long)]
     pub distill_now: bool,
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Args)]
@@ -153,11 +158,15 @@ pub fn run() -> Result<()> {
 
     // Every command validates CWD except diagnostics.
     match &cli.command {
-        Command::Status | Command::MoonStatus | Command::Verify(_) => {
+        Command::Status
+        | Command::MoonStatus
+        | Command::MoonHealth
+        | Command::Verify(_)
+        | Command::Config(_) => {
             // Diagnostics are exempt from CWD enforcement.
         }
         _ => {
-            commands::validate_cwd(&paths)?;
+            commands::validate_cwd(&paths, cli.allow_out_of_bounds)?;
         }
     }
 
@@ -195,6 +204,7 @@ pub fn run() -> Result<()> {
                 once: args.once,
                 daemon: args.daemon,
                 distill_now: args.distill_now,
+                dry_run: args.dry_run,
             })?
         }
         Command::MoonEmbed(args) => {
@@ -220,9 +230,11 @@ pub fn run() -> Result<()> {
                 dry_run: args.dry_run,
             })?
         }
-        Command::Config(args) => commands::moon_config::run(&commands::moon_config::MoonConfigOptions {
-            show: args.show,
-        })?,
+        Command::Config(args) => {
+            commands::moon_config::run(&commands::moon_config::MoonConfigOptions {
+                show: args.show,
+            })?
+        }
         Command::MoonHealth => commands::moon_health::run()?,
     };
 

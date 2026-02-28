@@ -7,3 +7,4 @@
 5. Rotate keys immediately if exposure is suspected.
 6. Audit logs must not include secrets.
 7. Use HTTPS-only model endpoints.
+8. CLI diagnostics must mask API keys (`moon-status`, `config --show`, `verify`/`status` output).

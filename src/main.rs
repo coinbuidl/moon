@@ -8,7 +8,12 @@ mod moon;
 mod openclaw;
 
 fn main() {
-    env_loader::load_dotenv();
+    if matches!(
+        env_loader::load_dotenv(),
+        env_loader::DotenvLoadOutcome::Missing
+    ) {
+        eprintln!("WARN: `.env` not found — distill/embed features will be unavailable.");
+    }
 
     if let Err(err) = cli::run() {
         eprintln!("error: {err:#}");

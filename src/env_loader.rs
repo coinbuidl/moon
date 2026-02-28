@@ -1,14 +1,21 @@
 use std::env;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DotenvLoadOutcome {
+    LoadedDefault,
+    LoadedFallback(PathBuf),
+    Missing,
+}
+
 fn fallback_dotenv_path(moon_home: Option<PathBuf>, home_dir: Option<PathBuf>) -> Option<PathBuf> {
     let base = moon_home.or(home_dir)?;
     Some(base.join("moon/.env"))
 }
 
-pub fn load_dotenv() {
+pub fn load_dotenv() -> DotenvLoadOutcome {
     if dotenvy::dotenv().is_ok() {
-        return;
+        return DotenvLoadOutcome::LoadedDefault;
     }
 
     let fallback = fallback_dotenv_path(
@@ -17,11 +24,15 @@ pub fn load_dotenv() {
     );
 
     let Some(path) = fallback else {
-        return;
+        return DotenvLoadOutcome::Missing;
     };
     if path.is_file() {
-        let _ = dotenvy::from_path(&path);
+        if dotenvy::from_path(&path).is_ok() {
+            return DotenvLoadOutcome::LoadedFallback(path);
+        }
     }
+
+    DotenvLoadOutcome::Missing
 }
 
 #[cfg(test)]
