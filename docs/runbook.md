@@ -20,12 +20,12 @@ moon moon-watch --once
 
 Distill trigger behavior:
 
-1. Use `distill.mode = "idle"` with `distill.idle_secs = 360` for active OpenClaw environments.
-2. Use `distill.mode = "daily"` for once-per-residential-day L1 queue attempts after `distill.idle_secs` (set `distill.residential_timezone`, e.g. `Australia/Sydney`).
-3. Auto `syns` runs once per residential day on the first watcher cycle after local midnight.
-4. Auto `syns` blends yesterday's daily memory file (`memory/YYYY-MM-DD.md`) with current `memory.md` (when present), then rewrites `memory.md`.
-5. Auto L1 reads archive projection markdown (`archives/mlib/*.md`) as its source.
-6. L1 selection order is oldest pending archive day first, then up to `max_per_cycle`.
+1. Watcher L1 normalisation is always auto-check, gated by `watcher.cooldown_secs`.
+2. Auto L1 source is projection markdown only: `archives/mlib/*.md` (never raw JSONL).
+3. Auto L1 selects pending projections deterministically and applies `distill.max_per_cycle`.
+4. Auto L1 uses a non-blocking lock; lock contention degrades/skips this cycle.
+5. Auto `syns` runs once per residential day on the first watcher cycle after local midnight.
+6. Auto `syns` blends yesterday's daily memory file (`memory/YYYY-MM-DD.md`) with current `memory.md` (when present), then rewrites `memory.md`.
 7. Start with `max_per_cycle=1` in test stage, then increase after stable runs.
 8. When `distill.topic_discovery = true`, daily memory files maintain a top `Entity Anchors` block with discovered topic tags.
 
@@ -51,6 +51,11 @@ moon moon-health
 ```bash
 moon distill -mode norm -archive $MOON_ARCHIVES_DIR/mlib/<file>.md -session-id <id>
 ```
+
+Rules:
+1. `-archive` is required and must point to a readable `archives/mlib/*.md` file.
+2. The file must be pending (indexed and not yet normalised in state ledger).
+3. Manual norm is immediate and bypasses watcher cooldown, but still requires L1 lock availability.
 
 Manual Layer-2 distillation:
 

@@ -329,7 +329,6 @@ fn moon_watch_once_retries_embed_with_smaller_batch_after_timeout() {
         .env("MOON_TEST_QMD_LOG", &qmd_log)
         .env("MOON_EMBED_MAX_DOCS_PER_CYCLE", "4")
         .env("MOON_EMBED_MAX_CYCLE_SECS", "1")
-        .env("MOON_DISTILL_MODE", "manual")
         .arg("moon-watch")
         .arg("--once")
         .assert()
@@ -502,7 +501,8 @@ fn moon_watch_once_distills_oldest_pending_archive_day_first() {
     let tmp = tempdir().expect("tempdir");
     let moon_home = tmp.path().join("moon");
     let sessions_dir = tmp.path().join("sessions");
-    fs::create_dir_all(moon_home.join("archives")).expect("mkdir archives");
+    fs::create_dir_all(moon_home.join("archives/raw")).expect("mkdir archives raw");
+    fs::create_dir_all(moon_home.join("archives/mlib")).expect("mkdir archives mlib");
     fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
     fs::create_dir_all(moon_home.join("moon/logs")).expect("mkdir logs");
     fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
@@ -512,20 +512,14 @@ fn moon_watch_once_distills_oldest_pending_archive_day_first() {
     )
     .expect("write session");
 
-    let old_archive = moon_home.join("archives/old.jsonl");
-    let new_archive = moon_home.join("archives/new.jsonl");
+    let old_archive = moon_home.join("archives/raw/old.jsonl");
+    let new_archive = moon_home.join("archives/raw/new.jsonl");
+    let old_projection = moon_home.join("archives/mlib/old.md");
+    let new_projection = moon_home.join("archives/mlib/new.md");
     fs::write(&old_archive, "{\"session\":\"old\"}\n").expect("write old archive");
     fs::write(&new_archive, "{\"session\":\"new\"}\n").expect("write new archive");
-    fs::write(
-        old_archive.with_extension("md"),
-        "- [user] old projection\n",
-    )
-    .expect("write old projection");
-    fs::write(
-        new_archive.with_extension("md"),
-        "- [user] new projection\n",
-    )
-    .expect("write new projection");
+    fs::write(&old_projection, "- [user] old projection\n").expect("write old projection");
+    fs::write(&new_projection, "- [user] new projection\n").expect("write new projection");
 
     let ledger = format!(
         concat!(
@@ -548,8 +542,6 @@ fn moon_watch_once_distills_oldest_pending_archive_day_first() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "idle")
-        .env("MOON_DISTILL_IDLE_SECS", "1")
         .env("MOON_DISTILL_PROVIDER", "local")
         .env("MOON_DISTILL_MAX_PER_CYCLE", "1")
         .env("MOON_COOLDOWN_SECS", "0")
@@ -571,7 +563,8 @@ fn moon_watch_once_distill_selection_skips_unindexed_missing_and_already_distill
     let tmp = tempdir().expect("tempdir");
     let moon_home = tmp.path().join("moon");
     let sessions_dir = tmp.path().join("sessions");
-    fs::create_dir_all(moon_home.join("archives")).expect("mkdir archives");
+    fs::create_dir_all(moon_home.join("archives/raw")).expect("mkdir archives raw");
+    fs::create_dir_all(moon_home.join("archives/mlib")).expect("mkdir archives mlib");
     fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
     fs::create_dir_all(moon_home.join("moon/logs")).expect("mkdir logs");
     fs::create_dir_all(moon_home.join("state")).expect("mkdir state");
@@ -582,25 +575,25 @@ fn moon_watch_once_distill_selection_skips_unindexed_missing_and_already_distill
     )
     .expect("write session");
 
-    let eligible = moon_home.join("archives/eligible.jsonl");
-    let unindexed = moon_home.join("archives/unindexed.jsonl");
-    let already = moon_home.join("archives/already.jsonl");
-    let missing = moon_home.join("archives/missing.jsonl");
+    let eligible = moon_home.join("archives/raw/eligible.jsonl");
+    let unindexed = moon_home.join("archives/raw/unindexed.jsonl");
+    let already = moon_home.join("archives/raw/already.jsonl");
+    let missing = moon_home.join("archives/raw/missing.jsonl");
     fs::write(&eligible, "{\"session\":\"eligible\"}\n").expect("write eligible");
     fs::write(&unindexed, "{\"session\":\"unindexed\"}\n").expect("write unindexed");
     fs::write(&already, "{\"session\":\"already\"}\n").expect("write already");
     fs::write(
-        eligible.with_extension("md"),
+        moon_home.join("archives/mlib/eligible.md"),
         "- [user] eligible projection\n",
     )
     .expect("write eligible projection");
     fs::write(
-        unindexed.with_extension("md"),
+        moon_home.join("archives/mlib/unindexed.md"),
         "- [user] unindexed projection\n",
     )
     .expect("write unindexed projection");
     fs::write(
-        already.with_extension("md"),
+        moon_home.join("archives/mlib/already.md"),
         "- [user] already projection\n",
     )
     .expect("write already projection");
@@ -637,8 +630,6 @@ fn moon_watch_once_distill_selection_skips_unindexed_missing_and_already_distill
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "idle")
-        .env("MOON_DISTILL_IDLE_SECS", "1")
         .env("MOON_DISTILL_PROVIDER", "local")
         .env("MOON_DISTILL_MAX_PER_CYCLE", "5")
         .env("MOON_COOLDOWN_SECS", "0")
@@ -699,7 +690,6 @@ fn moon_watch_once_distill_now_runs_in_manual_mode() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "manual")
         .env("MOON_DISTILL_PROVIDER", "local")
         .env("MOON_DISTILL_MAX_PER_CYCLE", "1")
         .arg("moon-watch")
@@ -763,7 +753,6 @@ fn moon_watch_once_runs_auto_syns_with_yesterday_and_memory_sources() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "manual")
         .env("MOON_RESIDENTIAL_TIMEZONE", "UTC")
         .env("MOON_WISDOM_PROVIDER", "local")
         .arg("moon-watch")
@@ -779,7 +768,7 @@ fn moon_watch_once_runs_auto_syns_with_yesterday_and_memory_sources() {
 
 #[test]
 #[cfg(not(windows))]
-fn moon_watch_daily_mode_waits_for_idle_window_before_attempt() {
+fn moon_watch_l1_auto_path_distills_without_idle_mode_gating() {
     let tmp = tempdir().expect("tempdir");
     let moon_home = tmp.path().join("moon");
     let sessions_dir = tmp.path().join("sessions");
@@ -825,8 +814,6 @@ fn moon_watch_daily_mode_waits_for_idle_window_before_attempt() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "daily")
-        .env("MOON_DISTILL_IDLE_SECS", "180")
         .env("MOON_RESIDENTIAL_TIMEZONE", "UTC")
         .env("MOON_DISTILL_PROVIDER", "local")
         .env("MOON_DISTILL_MAX_PER_CYCLE", "1")
@@ -839,8 +826,9 @@ fn moon_watch_daily_mode_waits_for_idle_window_before_attempt() {
 
     let state_file = moon_home.join("moon/state/moon_state.json");
     let distilled = read_distilled_archive_paths(&state_file);
-    assert!(distilled.is_empty());
-    assert!(read_last_distill_trigger_epoch(&state_file).is_none());
+    assert_eq!(distilled.len(), 1);
+    assert!(distilled.contains(&archive_path.to_string_lossy().to_string()));
+    assert!(read_last_distill_trigger_epoch(&state_file).is_some());
 }
 
 #[test]
@@ -871,8 +859,6 @@ fn moon_watch_once_emits_ai_warning_when_ledger_is_invalid() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "idle")
-        .env("MOON_DISTILL_IDLE_SECS", "1")
         .env("MOON_COOLDOWN_SECS", "0")
         .arg("moon-watch")
         .arg("--once")
@@ -945,7 +931,6 @@ fn moon_watch_once_cleans_up_expired_distilled_archives_after_grace_period() {
             "MOON_TEST_CURRENT_JSON",
             r#"{"sessionId":"agent:main:main","usage":{"totalTokens":120},"limits":{"maxTokens":100000}}"#,
         )
-        .env("MOON_DISTILL_MODE", "manual")
         .arg("moon-watch")
         .arg("--once")
         .assert()
@@ -1016,7 +1001,6 @@ fn moon_watch_once_retention_keeps_recent_cold_window_archives() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .env("MOON_DISTILL_MODE", "manual")
         .env("MOON_RETENTION_ACTIVE_DAYS", "7")
         .env("MOON_RETENTION_WARM_DAYS", "30")
         .env("MOON_RETENTION_COLD_DAYS", "31")

@@ -50,18 +50,19 @@ Rules:
 ## Distill Trigger Contract
 
 Fields:
-1. `distill.mode: String` (`manual`, `idle`, or `daily`)
-2. `distill.idle_secs: u64`
-3. `distill.max_per_cycle: u64`
-4. `distill.residential_timezone: String` (IANA TZ; default `UTC`)
+1. `watcher.cooldown_secs: u64`
+2. `distill.max_per_cycle: u64`
+3. `distill.residential_timezone: String` (IANA TZ; default `UTC`)
 
 Rules:
-1. `idle` / `daily` modes govern L1 Normalisation queue selection only.
-2. L1 selection is deterministic: oldest pending archive day first, then up to `max_per_cycle`.
-3. Auto L2 Synthesis (`syns`) runs once per residential day on the first watcher cycle after local midnight.
-4. Auto `syns` sources are yesterday's daily memory file plus current `memory.md` (when present).
-5. `moon-watch --once --distill-now` is a manual L1 queue trigger.
-6. Direct CLI triggers: `moon distill -mode norm` (L1 Normalisation) and `moon distill -mode syns` (L2 Synthesis).
+1. Watcher auto L1 runs only when cooldown passes and pending projection markdown exists in `archives/mlib/*.md`.
+2. L1 selection is deterministic and bounded by `max_per_cycle`.
+3. L1 lock is non-blocking and single-run; watcher lock contention degrades/skips current cycle.
+4. `moon-watch --once --distill-now` is a manual watcher trigger for the same L1 queue.
+5. Manual L1 (`moon distill -mode norm -archive <path>`) requires explicit readable pending projection path and lock availability; lock/no-pending returns error.
+6. Auto L2 Synthesis (`syns`) runs once per residential day on the first watcher cycle after local midnight.
+7. Auto `syns` sources are yesterday's daily memory file plus current `memory.md` (when present).
+8. Direct CLI triggers: `moon distill -mode norm` (L1 Normalisation) and `moon distill -mode syns` (L2 Synthesis).
 
 ## DaemonLockPayload
 

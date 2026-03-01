@@ -56,8 +56,6 @@ pub fn run(opts: &MoonConfigOptions) -> Result<CommandReport> {
             "inbound_watch.watch_paths={:?}",
             cfg.inbound_watch.watch_paths
         ));
-        report.detail(format!("distill.mode={}", cfg.distill.mode));
-        report.detail(format!("distill.idle_secs={}", cfg.distill.idle_secs));
         report.detail(format!(
             "distill.max_per_cycle={}",
             cfg.distill.max_per_cycle

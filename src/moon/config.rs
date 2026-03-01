@@ -60,8 +60,6 @@ impl Default for MoonInboundWatchConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoonDistillConfig {
-    pub mode: String,
-    pub idle_secs: u64,
     pub max_per_cycle: u64,
     #[serde(default = "default_residential_timezone")]
     pub residential_timezone: String,
@@ -76,8 +74,6 @@ fn default_residential_timezone() -> String {
 impl Default for MoonDistillConfig {
     fn default() -> Self {
         Self {
-            mode: "manual".to_string(),
-            idle_secs: 360,
             max_per_cycle: 1,
             residential_timezone: "UTC".to_string(),
             topic_discovery: false,
@@ -295,16 +291,8 @@ fn validate(cfg: &MoonConfig) -> Result<()> {
     if cfg.inbound_watch.event_mode.trim().is_empty() {
         return Err(anyhow!("invalid inbound event mode: cannot be empty"));
     }
-    if cfg.distill.mode != "manual" && cfg.distill.mode != "idle" && cfg.distill.mode != "daily" {
-        return Err(anyhow!(
-            "invalid distill mode: use `manual`, `idle`, or `daily`"
-        ));
-    }
     if cfg.distill.max_per_cycle == 0 {
         return Err(anyhow!("invalid distill max per cycle: must be >= 1"));
-    }
-    if cfg.distill.idle_secs == 0 {
-        return Err(anyhow!("invalid distill idle secs: must be >= 1"));
     }
     if cfg.retention.active_days == 0 {
         return Err(anyhow!("invalid retention active days: must be >= 1"));
@@ -457,8 +445,6 @@ pub fn load_config() -> Result<MoonConfig> {
         env_or_string("MOON_INBOUND_EVENT_MODE", &cfg.inbound_watch.event_mode);
     cfg.inbound_watch.watch_paths =
         env_or_csv_paths("MOON_INBOUND_WATCH_PATHS", &cfg.inbound_watch.watch_paths);
-    cfg.distill.mode = env_or_string("MOON_DISTILL_MODE", &cfg.distill.mode);
-    cfg.distill.idle_secs = env_or_u64("MOON_DISTILL_IDLE_SECS", cfg.distill.idle_secs);
     cfg.distill.max_per_cycle = env_or_u64("MOON_DISTILL_MAX_PER_CYCLE", cfg.distill.max_per_cycle);
     cfg.distill.residential_timezone = env_or_string(
         "MOON_RESIDENTIAL_TIMEZONE",
@@ -530,8 +516,6 @@ fn env_allowlist() -> &'static [&'static str] {
         "MOON_INBOUND_RECURSIVE",
         "MOON_INBOUND_EVENT_MODE",
         "MOON_INBOUND_WATCH_PATHS",
-        "MOON_DISTILL_MODE",
-        "MOON_DISTILL_IDLE_SECS",
         "MOON_DISTILL_MAX_PER_CYCLE",
         "MOON_RESIDENTIAL_TIMEZONE",
         "MOON_TOPIC_DISCOVERY",

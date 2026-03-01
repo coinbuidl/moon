@@ -274,8 +274,6 @@ poll_interval_secs = 30
 cooldown_secs = 60
 
 [distill]
-mode = "daily"
-idle_secs = 360
 max_per_cycle = 3
 residential_timezone = "UTC"
 topic_discovery = true
@@ -344,6 +342,7 @@ Commands:
 12. `moon-recall --query <text> [--name <collection>]`
 13. `distill -mode <norm|syns> [-archive <path>] [-session-id <id>] [-file <path> ...] [-dry-run]`
     - `-mode norm` (default): L1 Normalisation for one projection file (`archives/mlib/*.md`) into daily memory
+    - `-mode norm` requires explicit `-archive <path>` and that file must be pending in ledger/state; lock contention or no pending match returns an error
     - `-mode syns`: L2 Synthesis rewrites the whole `memory.md` from synthesis output
     - `-mode syns` default sources (manual CLI): today's daily memory + current `memory.md`
     - `-mode syns -file <path> ...`: distill only those files together; `memory.md` participates only if explicitly included as a `-file`
@@ -437,18 +436,19 @@ Health probe:
 moon moon-health
 ```
 
-Idle distill selection order:
+L1 auto trigger behavior:
 
-1. L1 Normalisation waits until the latest archive has been idle for `distill.idle_secs`.
-2. It then selects the oldest pending archive day first.
-3. It distills projection markdown sidecars (`*.md`) for those archives, not raw `*.jsonl`.
-4. It processes up to `max_per_cycle` archives from that day.
+1. Watcher L1 path is auto: `moon-watch` checks L1 every cycle.
+2. Cooldown must pass (`watcher.cooldown_secs`).
+3. Pending source must exist in `archives/mlib/*.md` (projection markdown only).
+4. Selection is deterministic and bounded by `distill.max_per_cycle`.
+5. L1 runs under a non-blocking lock; if busy, watcher degrades/skips and retries next cycle.
 
 Daily `syns` schedule:
 
 1. Watcher attempts `syns` once per residential day (`distill.residential_timezone`) on the first cycle after local midnight.
 2. Auto `syns` sources are yesterday's daily file (`memory/YYYY-MM-DD.md`) plus current `memory.md` (when present).
-3. It does not require `distill.mode = manual`; agents can run `moon distill -mode syns` directly at any time.
+3. Agents can run `moon distill -mode syns` directly at any time.
 4. `moon moon-watch --once --distill-now` remains a manual trigger for L1 queue processing.
 
 Retention lifecycle windows:
@@ -516,7 +516,7 @@ Primary tuning belongs in `moon.toml`:
 
 1. `[context] window_mode`, `window_tokens`, `prune_mode`, `compaction_authority`, `compaction_start_ratio`, `compaction_emergency_ratio`
 2. `[watcher] poll_interval_secs`, `cooldown_secs`
-3. `[distill] mode`, `idle_secs`, `max_per_cycle`, `residential_timezone`, `topic_discovery`
+3. `[distill] max_per_cycle`, `residential_timezone`, `topic_discovery`
 4. `[retention] active_days`, `warm_days`, `cold_days`
 5. `[embed] mode` (fixed `auto`; legacy aliases normalize), `idle_secs` (legacy compatibility), `cooldown_secs`, `max_docs_per_cycle`, `min_pending_docs`, `max_cycle_secs`
 6. `[inbound_watch] enabled`, `recursive`, `watch_paths`, `event_mode`

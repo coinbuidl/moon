@@ -25,10 +25,9 @@ use crate::moon::thresholds::{TriggerKind, evaluate, evaluate_context_compaction
 use crate::moon::warn::{self, WarnEvent};
 use crate::openclaw::gateway;
 use anyhow::{Context, Result};
-use chrono::{Local, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use chrono_tz::Tz;
 use fs2::FileExt;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -41,26 +40,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const BUILD_UUID: &str = env!("BUILD_UUID");
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DistillTriggerMode {
-    Manual,
-    Idle,
-    Daily,
-}
-
-impl DistillTriggerMode {
-    fn from_config_mode(raw: &str) -> Self {
-        // Reserved for future trigger extensions (for example archive_event).
-        if raw.eq_ignore_ascii_case("idle") {
-            Self::Idle
-        } else if raw.eq_ignore_ascii_case("daily") {
-            Self::Daily
-        } else {
-            Self::Manual
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WatchRunOptions {
@@ -77,8 +56,6 @@ pub struct WatchCycleOutcome {
     pub compaction_authority: String,
     pub compaction_emergency_ratio: Option<f64>,
     pub compaction_recover_ratio: Option<f64>,
-    pub distill_mode: String,
-    pub distill_idle_secs: u64,
     pub distill_max_per_cycle: u64,
     pub embed_mode: String,
     pub embed_idle_secs: u64,
@@ -113,6 +90,18 @@ fn parse_residential_tz(cfg: &crate::moon::config::MoonConfig) -> Tz {
     residential_tz_name(cfg)
         .parse::<Tz>()
         .unwrap_or(chrono_tz::UTC)
+}
+
+fn is_l1_norm_lock_contention(err: &anyhow::Error) -> bool {
+    if err
+        .chain()
+        .any(|cause| matches!(cause.downcast_ref::<std::io::Error>(), Some(io_err) if io_err.kind() == ErrorKind::WouldBlock))
+    {
+        return true;
+    }
+    err.to_string()
+        .to_ascii_lowercase()
+        .contains("l1 normalisation lock is already held")
 }
 
 fn day_key_for_epoch_in_timezone(epoch_secs: u64, tz: Tz) -> String {
@@ -258,25 +247,39 @@ fn load_session_source_map(sessions_dir: &Path) -> Result<BTreeMap<String, PathB
     Ok(out)
 }
 
-fn resolve_distill_source_path(record: &crate::moon::archive::ArchiveRecord) -> Option<PathBuf> {
+fn resolve_distill_source_path(
+    paths: &crate::moon::paths::MoonPaths,
+    record: &crate::moon::archive::ArchiveRecord,
+) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+
     if let Some(path) = record.projection_path.as_deref() {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
-            let projection = PathBuf::from(trimmed);
-            if projection.exists() {
-                return Some(projection);
-            }
+            candidates.push(PathBuf::from(trimmed));
         }
     }
+    candidates.push(projection_path_for_archive(&record.archive_path));
 
-    let fallback = projection_path_for_archive(&record.archive_path);
-    if fallback.exists() {
-        return Some(fallback);
-    }
-
-    let legacy = Path::new(&record.archive_path).with_extension("md");
-    if legacy.exists() {
-        return Some(legacy);
+    for candidate in candidates {
+        if !candidate.exists() {
+            continue;
+        }
+        let is_markdown = candidate
+            .extension()
+            .and_then(|v| v.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
+        if !is_markdown {
+            continue;
+        }
+        let mlib_root = paths.archives_dir.join("mlib");
+        let normalized_candidate =
+            fs::canonicalize(&candidate).unwrap_or_else(|_| candidate.clone());
+        let normalized_mlib_root = fs::canonicalize(&mlib_root).unwrap_or(mlib_root);
+        let in_mlib = normalized_candidate.starts_with(normalized_mlib_root);
+        if in_mlib {
+            return Some(candidate);
+        }
     }
 
     None
@@ -511,14 +514,6 @@ fn cleanup_expired_distilled_archives(
     )))
 }
 
-fn day_key_for_epoch(epoch_secs: u64) -> String {
-    Local
-        .timestamp_opt(epoch_secs as i64, 0)
-        .single()
-        .map(|dt| dt.format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| "1970-01-01".to_string())
-}
-
 fn select_pending_distill_candidates(
     paths: &crate::moon::paths::MoonPaths,
     state: &crate::moon::state::MoonState,
@@ -537,10 +532,7 @@ fn select_pending_distill_candidates(
     let mut pending = Vec::new();
     let mut skipped_non_distillable = 0usize;
     for record in ledger {
-        if !record.indexed
-            || state.distilled_archives.contains_key(&record.archive_path)
-            || !Path::new(&record.archive_path).exists()
-        {
+        if !record.indexed || state.distilled_archives.contains_key(&record.archive_path) {
             continue;
         }
 
@@ -549,7 +541,7 @@ fn select_pending_distill_candidates(
             continue;
         }
 
-        let Some(distill_source_path) = resolve_distill_source_path(&record) else {
+        let Some(distill_source_path) = resolve_distill_source_path(paths, &record) else {
             warn::emit(WarnEvent {
                 code: "DISTILL_SOURCE_MISSING",
                 stage: "distill-selection",
@@ -577,21 +569,17 @@ fn select_pending_distill_candidates(
         return Ok((distill_candidates, notes));
     }
 
-    if let Some((first_pending, _)) = pending.first() {
-        let day_key = day_key_for_epoch(first_pending.created_at_epoch_secs);
+    if !pending.is_empty() {
         for (record, distill_source_path) in pending {
-            if day_key_for_epoch(record.created_at_epoch_secs) != day_key {
-                continue;
-            }
             distill_candidates.push((record, distill_source_path));
             if distill_candidates.len() >= max_per_cycle as usize {
                 break;
             }
         }
         notes.push(format!(
-            "selected_day={} selected={} source=projection-md",
-            day_key,
+            "selected={} max_per_cycle={} source=archives/mlib/*.md",
             distill_candidates.len(),
+            max_per_cycle
         ));
         if skipped_non_distillable > 0 {
             notes.push(format!(
@@ -910,8 +898,6 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
             compaction_emergency_ratio: context_policy
                 .map(|policy| policy.compaction_emergency_ratio),
             compaction_recover_ratio: context_policy.map(|policy| policy.compaction_recover_ratio),
-            distill_mode: cfg.distill.mode.clone(),
-            distill_idle_secs: cfg.distill.idle_secs,
             distill_max_per_cycle: cfg.distill.max_per_cycle,
             embed_mode: cfg.embed.mode.clone(),
             embed_idle_secs: cfg.embed.idle_secs,
@@ -1089,19 +1075,30 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
     let mut distill_notes = Vec::<String>::new();
     let mut distill_candidates = Vec::<(crate::moon::archive::ArchiveRecord, String)>::new();
 
-    let distill_trigger_mode = DistillTriggerMode::from_config_mode(&cfg.distill.mode);
     let residential_tz = parse_residential_tz(&cfg);
     let current_day_key =
         day_key_for_epoch_in_timezone(usage.captured_at_epoch_secs, residential_tz);
-    let last_distill_day_key = state
-        .last_distill_trigger_epoch_secs
-        .map(|epoch| day_key_for_epoch_in_timezone(epoch, residential_tz));
     let last_syns_day_key = state
         .last_syns_trigger_epoch_secs
         .map(|epoch| day_key_for_epoch_in_timezone(epoch, residential_tz));
-
-    if run_opts.force_distill_now {
+    let should_select_distill = if run_opts.force_distill_now {
         distill_notes.push("manual_trigger=true".to_string());
+        true
+    } else if !is_cooldown_ready(
+        state.last_distill_trigger_epoch_secs,
+        usage.captured_at_epoch_secs,
+        cfg.watcher.cooldown_secs,
+    ) {
+        distill_notes.push(format!(
+            "skipped reason=cooldown cooldown_secs={}",
+            cfg.watcher.cooldown_secs
+        ));
+        false
+    } else {
+        true
+    };
+
+    if should_select_distill {
         match select_pending_distill_candidates(&paths, &state, cfg.distill.max_per_cycle) {
             Ok((candidates, notes)) => {
                 distill_candidates = candidates;
@@ -1119,177 +1116,9 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
                     reason: "ledger-read-failed",
                     err: &format!("{err:#}"),
                 });
-                distill_notes.push(format!("skipped reason=ledger-read-failed error={err:#}"))
+                distill_notes.push(format!("skipped reason=ledger-read-failed error={err:#}"));
             }
         }
-    } else if matches!(distill_trigger_mode, DistillTriggerMode::Idle) {
-        if !is_cooldown_ready(
-            state.last_distill_trigger_epoch_secs,
-            usage.captured_at_epoch_secs,
-            cfg.watcher.cooldown_secs,
-        ) {
-            distill_notes.push(format!(
-                "skipped reason=cooldown cooldown_secs={}",
-                cfg.watcher.cooldown_secs
-            ));
-        } else {
-            match read_ledger_records(&paths) {
-                Ok(ledger) => {
-                    if ledger.is_empty() {
-                        distill_notes.push("skipped reason=no-archives".to_string());
-                    } else {
-                        let latest_archive_epoch = ledger
-                            .iter()
-                            .map(|r| r.created_at_epoch_secs)
-                            .max()
-                            .unwrap_or(0);
-                        let idle_for = usage
-                            .captured_at_epoch_secs
-                            .saturating_sub(latest_archive_epoch);
-                        if idle_for < cfg.distill.idle_secs {
-                            distill_notes.push(format!(
-                                "skipped reason=not-idle idle_for_secs={} idle_required_secs={}",
-                                idle_for, cfg.distill.idle_secs
-                            ));
-                        } else {
-                            match select_pending_distill_candidates(
-                                &paths,
-                                &state,
-                                cfg.distill.max_per_cycle,
-                            ) {
-                                Ok((candidates, notes)) => {
-                                    distill_candidates = candidates;
-                                    distill_notes.extend(notes);
-                                }
-                                Err(err) => {
-                                    warn::emit(WarnEvent {
-                                        code: "LEDGER_READ_FAILED",
-                                        stage: "distill-selection",
-                                        action: "read-ledger",
-                                        session: "na",
-                                        archive: "na",
-                                        source: "na",
-                                        retry: "retry-next-cycle",
-                                        reason: "ledger-read-failed",
-                                        err: &format!("{err:#}"),
-                                    });
-                                    distill_notes.push(format!(
-                                        "skipped reason=ledger-read-failed error={err:#}"
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    warn::emit(WarnEvent {
-                        code: "LEDGER_READ_FAILED",
-                        stage: "distill-selection",
-                        action: "read-ledger",
-                        session: "na",
-                        archive: "na",
-                        source: "na",
-                        retry: "retry-next-cycle",
-                        reason: "ledger-read-failed",
-                        err: &format!("{err:#}"),
-                    });
-                    distill_notes.push(format!("skipped reason=ledger-read-failed error={err:#}"))
-                }
-            }
-        }
-    } else if matches!(distill_trigger_mode, DistillTriggerMode::Daily) {
-        if last_distill_day_key.as_deref() == Some(current_day_key.as_str()) {
-            distill_notes.push(format!(
-                "skipped reason=already-attempted-today day_key={} timezone={}",
-                current_day_key,
-                residential_tz_name(&cfg)
-            ));
-        } else {
-            match read_ledger_records(&paths) {
-                Ok(ledger) => {
-                    if ledger.is_empty() {
-                        // Count this as today's daily attempt to avoid repeated no-op cycles.
-                        state.last_distill_trigger_epoch_secs = Some(usage.captured_at_epoch_secs);
-                        distill_notes.push(format!(
-                            "skipped reason=no-archives day_key={} timezone={}",
-                            current_day_key,
-                            residential_tz_name(&cfg)
-                        ));
-                    } else {
-                        let latest_archive_epoch = ledger
-                            .iter()
-                            .map(|r| r.created_at_epoch_secs)
-                            .max()
-                            .unwrap_or(0);
-                        let idle_for = usage
-                            .captured_at_epoch_secs
-                            .saturating_sub(latest_archive_epoch);
-                        if idle_for < cfg.distill.idle_secs {
-                            distill_notes.push(format!(
-                                "skipped reason=not-idle day_key={} timezone={} idle_for_secs={} idle_required_secs={}",
-                                current_day_key,
-                                residential_tz_name(&cfg),
-                                idle_for,
-                                cfg.distill.idle_secs
-                            ));
-                        } else {
-                            distill_notes.push(format!(
-                                "daily_trigger day_key={} timezone={} idle_for_secs={} idle_required_secs={}",
-                                current_day_key,
-                                residential_tz_name(&cfg),
-                                idle_for,
-                                cfg.distill.idle_secs
-                            ));
-                            // Daily mode is once per residential day after idle guard.
-                            state.last_distill_trigger_epoch_secs =
-                                Some(usage.captured_at_epoch_secs);
-                            match select_pending_distill_candidates(
-                                &paths,
-                                &state,
-                                cfg.distill.max_per_cycle,
-                            ) {
-                                Ok((candidates, notes)) => {
-                                    distill_candidates = candidates;
-                                    distill_notes.extend(notes);
-                                }
-                                Err(err) => {
-                                    warn::emit(WarnEvent {
-                                        code: "LEDGER_READ_FAILED",
-                                        stage: "distill-selection",
-                                        action: "read-ledger",
-                                        session: "na",
-                                        archive: "na",
-                                        source: "na",
-                                        retry: "retry-next-cycle",
-                                        reason: "ledger-read-failed",
-                                        err: &format!("{err:#}"),
-                                    });
-                                    distill_notes.push(format!(
-                                        "skipped reason=ledger-read-failed error={err:#}"
-                                    ))
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    warn::emit(WarnEvent {
-                        code: "LEDGER_READ_FAILED",
-                        stage: "distill-selection",
-                        action: "read-ledger",
-                        session: "na",
-                        archive: "na",
-                        source: "na",
-                        retry: "retry-next-cycle",
-                        reason: "ledger-read-failed",
-                        err: &format!("{err:#}"),
-                    });
-                    distill_notes.push(format!("skipped reason=ledger-read-failed error={err:#}"))
-                }
-            }
-        }
-    } else {
-        distill_notes.push("skipped reason=manual-mode".to_string());
     }
 
     if !distill_candidates.is_empty() {
@@ -1352,6 +1181,32 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
                     distill_out = Some(distill);
                 }
                 Err(err) => {
+                    if is_l1_norm_lock_contention(&err) {
+                        warn::emit(WarnEvent {
+                            code: "DISTILL_LOCKED",
+                            stage: "distill",
+                            action: "acquire-lock",
+                            session: &record.session_id,
+                            archive: &record.archive_path,
+                            source: &record.source_path,
+                            retry: "retry-next-cycle",
+                            reason: "l1-normalisation-lock-active",
+                            err: "l1-normalisation-lock-active",
+                        });
+                        audit::append_event(
+                            &paths,
+                            "distill",
+                            "degraded",
+                            &format!(
+                                "skipped reason=lock-active archive={} distill_source={} source={} session={}",
+                                record.archive_path,
+                                distill_source_path,
+                                record.source_path,
+                                record.session_id
+                            ),
+                        )?;
+                        break;
+                    }
                     warn::emit(WarnEvent {
                         code: "DISTILL_FAILED",
                         stage: "distill",
@@ -1368,7 +1223,7 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
                         "distill",
                         "degraded",
                         &format!(
-                            "mode=idle archive={} distill_source={} source={} session={} error={err:#}",
+                            "archive={} distill_source={} source={} session={} error={err:#}",
                             record.archive_path,
                             distill_source_path,
                             record.source_path,
@@ -1560,8 +1415,6 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
         compaction_authority,
         compaction_emergency_ratio: context_policy.map(|policy| policy.compaction_emergency_ratio),
         compaction_recover_ratio: context_policy.map(|policy| policy.compaction_recover_ratio),
-        distill_mode: cfg.distill.mode.clone(),
-        distill_idle_secs: cfg.distill.idle_secs,
         distill_max_per_cycle: cfg.distill.max_per_cycle,
         embed_mode: cfg.embed.mode.clone(),
         embed_idle_secs: cfg.embed.idle_secs,

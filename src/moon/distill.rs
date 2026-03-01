@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -180,6 +180,7 @@ const WISDOM_MIN_DAILY_CHUNK_BYTES: usize = 16 * 1024;
 const DAILY_MEMORY_FORMAT_MARKER: &str = "<!-- moon_memory_format: conversation_v1 -->";
 const SESSION_BLOCK_BEGIN_PREFIX: &str = "<!-- MOON_SESSION_BEGIN:";
 const SESSION_BLOCK_END_PREFIX: &str = "<!-- MOON_SESSION_END:";
+const L1_NORM_LOCK_FILE: &str = "l1-normalisation.lock";
 const MEMORY_LOCK_FILE: &str = "memory.md.lock";
 const DISTILL_AUDIT_FILE: &str = "distill.audit.log";
 const ENTITY_ANCHORS_BEGIN: &str = "<!-- MOON_ENTITY_ANCHORS_BEGIN -->";
@@ -2599,6 +2600,27 @@ fn acquire_memory_lock(paths: &MoonPaths) -> Result<fs::File> {
     Ok(lock_file)
 }
 
+fn acquire_l1_normalisation_lock(paths: &MoonPaths) -> Result<fs::File> {
+    fs::create_dir_all(&paths.logs_dir)
+        .with_context(|| format!("failed to create {}", paths.logs_dir.display()))?;
+    let lock_path = paths.logs_dir.join(L1_NORM_LOCK_FILE);
+    let lock_file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .with_context(|| format!("failed to open {}", lock_path.display()))?;
+
+    match lock_file.try_lock_exclusive() {
+        Ok(()) => Ok(lock_file),
+        Err(err) if err.kind() == ErrorKind::WouldBlock => {
+            anyhow::bail!("l1 normalisation lock is already held")
+        }
+        Err(err) => Err(err).with_context(|| format!("failed to lock {}", lock_path.display())),
+    }
+}
+
 fn append_distill_audit_event(paths: &MoonPaths, event: &DistillAuditEvent) -> Result<String> {
     fs::create_dir_all(&paths.logs_dir)
         .with_context(|| format!("failed to create {}", paths.logs_dir.display()))?;
@@ -3382,6 +3404,7 @@ fn generate_wisdom_summary(
 pub fn run_distillation(paths: &MoonPaths, input: &DistillInput) -> Result<DistillOutput> {
     fs::create_dir_all(&paths.memory_dir)
         .with_context(|| format!("failed to create {}", paths.memory_dir.display()))?;
+    let _lock_file = acquire_l1_normalisation_lock(paths)?;
 
     let source_is_markdown = Path::new(&input.archive_path)
         .extension()

@@ -85,8 +85,6 @@ pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
     if let Some(v) = cycle.compaction_recover_ratio {
         report.detail(format!("compaction.recover_ratio={v}"));
     }
-    report.detail(format!("distill.mode={}", cycle.distill_mode));
-    report.detail(format!("distill.idle_secs={}", cycle.distill_idle_secs));
     report.detail(format!(
         "distill.max_per_cycle={}",
         cycle.distill_max_per_cycle
