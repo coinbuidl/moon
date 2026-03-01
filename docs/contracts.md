@@ -56,11 +56,12 @@ Fields:
 4. `distill.residential_timezone: String` (IANA TZ; default `UTC`)
 
 Rules:
-1. `idle` mode starts only after the latest archive has been idle for `idle_secs`.
-2. Selection is deterministic: oldest pending archive day first, then up to `max_per_cycle`.
-3. `daily` mode attempts layer-2 distillation once per residential day after the latest archive has been idle for `idle_secs`.
-4. `manual` mode disables automatic layer-2 distillation; manual trigger is `moon-watch --once --distill-now`.
-5. Direct CLI triggers: `moon distill -mode norm` (L1 Normalisation) and `moon distill -mode syns` (L2 Synthesis).
+1. `idle` / `daily` modes govern L1 Normalisation queue selection only.
+2. L1 selection is deterministic: oldest pending archive day first, then up to `max_per_cycle`.
+3. Auto L2 Synthesis (`syns`) runs once per residential day on the first watcher cycle after local midnight.
+4. Auto `syns` sources are yesterday's daily memory file plus current `memory.md` (when present).
+5. `moon-watch --once --distill-now` is a manual L1 queue trigger.
+6. Direct CLI triggers: `moon distill -mode norm` (L1 Normalisation) and `moon distill -mode syns` (L2 Synthesis).
 
 ## DaemonLockPayload
 

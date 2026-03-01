@@ -15,6 +15,7 @@ pub struct MoonState {
     #[serde(alias = "last_prune_trigger_epoch_secs")]
     pub last_compaction_trigger_epoch_secs: Option<u64>,
     pub last_distill_trigger_epoch_secs: Option<u64>,
+    pub last_syns_trigger_epoch_secs: Option<u64>,
     pub last_embed_trigger_epoch_secs: Option<u64>,
     pub last_session_id: Option<String>,
     pub last_usage_ratio: Option<f64>,
@@ -28,11 +29,12 @@ pub struct MoonState {
 impl Default for MoonState {
     fn default() -> Self {
         Self {
-            schema_version: 2,
+            schema_version: 3,
             last_heartbeat_epoch_secs: 0,
             last_archive_trigger_epoch_secs: None,
             last_compaction_trigger_epoch_secs: None,
             last_distill_trigger_epoch_secs: None,
+            last_syns_trigger_epoch_secs: None,
             last_embed_trigger_epoch_secs: None,
             last_session_id: None,
             last_usage_ratio: None,
@@ -97,8 +99,8 @@ pub fn load(paths: &MoonPaths) -> Result<MoonState> {
         }
     };
 
-    if parsed.schema_version < 2 {
-        parsed.schema_version = 2;
+    if parsed.schema_version < 3 {
+        parsed.schema_version = 3;
     }
     Ok(parsed)
 }

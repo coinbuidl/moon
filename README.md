@@ -345,7 +345,7 @@ Commands:
 13. `distill -mode <norm|syns> [-archive <path>] [-session-id <id>] [-file <path> ...] [-dry-run]`
     - `-mode norm` (default): L1 Normalisation for one projection file (`archives/mlib/*.md`) into daily memory
     - `-mode syns`: L2 Synthesis rewrites the whole `memory.md` from synthesis output
-    - `-mode syns` default sources: today's daily memory + current `memory.md`
+    - `-mode syns` default sources (manual CLI): today's daily memory + current `memory.md`
     - `-mode syns -file <path> ...`: distill only those files together; `memory.md` participates only if explicitly included as a `-file`
     - `moon-distill` remains as a backward-compatible alias
 14. `config [--show]`
@@ -439,17 +439,17 @@ moon moon-health
 
 Idle distill selection order:
 
-1. Distill waits until the latest archive has been idle for `distill.idle_secs`.
+1. L1 Normalisation waits until the latest archive has been idle for `distill.idle_secs`.
 2. It then selects the oldest pending archive day first.
 3. It distills projection markdown sidecars (`*.md`) for those archives, not raw `*.jsonl`.
 4. It processes up to `max_per_cycle` archives from that day.
 
-Daily distill selection order:
+Daily `syns` schedule:
 
-1. In `distill.mode = "daily"`, distill attempts once per residential day (`distill.residential_timezone`) after the latest archive is idle for `distill.idle_secs`.
-2. It selects the oldest pending archive day first.
-3. It distills projection markdown sidecars (`*.md`) for those archives.
-4. Use `moon moon-watch --once --distill-now` for manual immediate layer-2 runs.
+1. Watcher attempts `syns` once per residential day (`distill.residential_timezone`) on the first cycle after local midnight.
+2. Auto `syns` sources are yesterday's daily file (`memory/YYYY-MM-DD.md`) plus current `memory.md` (when present).
+3. It does not require `distill.mode = manual`; agents can run `moon distill -mode syns` directly at any time.
+4. `moon moon-watch --once --distill-now` remains a manual trigger for L1 queue processing.
 
 Retention lifecycle windows:
 

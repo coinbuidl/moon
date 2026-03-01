@@ -21,12 +21,13 @@ moon moon-watch --once
 Distill trigger behavior:
 
 1. Use `distill.mode = "idle"` with `distill.idle_secs = 360` for active OpenClaw environments.
-2. Use `distill.mode = "daily"` for once-per-residential-day layer-2 distillation after `distill.idle_secs` (set `distill.residential_timezone`, e.g. `Australia/Sydney`).
-3. `distill.mode = "manual"` disables automatic layer-2 distillation.
-4. Auto-distill reads archive projection markdown (`archives/mlib/*.md`) as its source.
-5. Selection order is oldest pending archive day first, then up to `max_per_cycle`.
-6. Start with `max_per_cycle=1` in test stage, then increase after stable runs.
-7. When `distill.topic_discovery = true`, daily memory files maintain a top `Entity Anchors` block with discovered topic tags.
+2. Use `distill.mode = "daily"` for once-per-residential-day L1 queue attempts after `distill.idle_secs` (set `distill.residential_timezone`, e.g. `Australia/Sydney`).
+3. Auto `syns` runs once per residential day on the first watcher cycle after local midnight.
+4. Auto `syns` blends yesterday's daily memory file (`memory/YYYY-MM-DD.md`) with current `memory.md` (when present), then rewrites `memory.md`.
+5. Auto L1 reads archive projection markdown (`archives/mlib/*.md`) as its source.
+6. L1 selection order is oldest pending archive day first, then up to `max_per_cycle`.
+7. Start with `max_per_cycle=1` in test stage, then increase after stable runs.
+8. When `distill.topic_discovery = true`, daily memory files maintain a top `Entity Anchors` block with discovered topic tags.
 
 Retention windows:
 
@@ -75,7 +76,7 @@ moon distill -mode syns -file $MOON_MEMORY_DIR/2026-03-01.md -file $MOON_MEMORY_
 
 When `-file` is provided, only the listed files participate. `memory.md` is included only if explicitly listed.
 
-Manual layer-2 queue trigger (same selection logic as watcher):
+Manual L1 queue trigger (same selection logic as watcher):
 
 ```bash
 moon moon-watch --once --distill-now

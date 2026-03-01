@@ -25,4 +25,4 @@ This skill covers:
 14. Manual embed must not alter watcher cooldown timing; watcher cooldown continues from watcher-trigger timestamps only.
 15. Keep embed bounded-only. If QMD lacks `--max-docs`, watcher degrades and manual embed returns capability-missing (no unbounded fallback).
 16. Embed lock is non-blocking: watcher reports degraded/locked and retries next cycle; manual command returns lock error immediately (no queue/wait behavior).
-17. For automatic layer-2 distillation, prefer `[distill].mode = "daily"` for once-per-residential-day runs; use `mode = "idle"` only when you want repeated idle-window distill cycles.
+17. `[distill].mode` controls L1 Normalisation queue behavior (`daily` for once-per-day L1 queue attempts, `idle` for repeated idle-window L1 attempts). Auto L2 `syns` is a separate once-per-residential-day watcher trigger; manual `moon distill -mode syns` is always available.

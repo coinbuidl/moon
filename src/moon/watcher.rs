@@ -123,6 +123,23 @@ fn day_key_for_epoch_in_timezone(epoch_secs: u64, tz: Tz) -> String {
     dt.format("%Y-%m-%d").to_string()
 }
 
+fn previous_day_key_for_epoch_in_timezone(epoch_secs: u64, tz: Tz) -> String {
+    let dt = tz
+        .timestamp_opt(epoch_secs as i64, 0)
+        .single()
+        .unwrap_or_else(|| tz.from_utc_datetime(&Utc::now().naive_utc()));
+    let previous_day = dt.date_naive() - chrono::Duration::days(1);
+    previous_day.format("%Y-%m-%d").to_string()
+}
+
+fn daily_memory_path_for_day_key(paths: &crate::moon::paths::MoonPaths, day_key: &str) -> String {
+    paths
+        .memory_dir
+        .join(format!("{day_key}.md"))
+        .display()
+        .to_string()
+}
+
 fn run_archive_if_needed(
     paths: &crate::moon::paths::MoonPaths,
     trigger_set: &[TriggerKind],
@@ -1079,6 +1096,9 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
     let last_distill_day_key = state
         .last_distill_trigger_epoch_secs
         .map(|epoch| day_key_for_epoch_in_timezone(epoch, residential_tz));
+    let last_syns_day_key = state
+        .last_syns_trigger_epoch_secs
+        .map(|epoch| day_key_for_epoch_in_timezone(epoch, residential_tz));
 
     if run_opts.force_distill_now {
         if !compaction_targets.is_empty() {
@@ -1280,7 +1300,6 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
         distill_notes.push("skipped reason=manual-mode".to_string());
     }
 
-    let mut layer1_distilled_any = false;
     if !distill_candidates.is_empty() {
         if !distill_notes.is_empty() {
             let selection_status = if distill_notes.iter().any(|note| {
@@ -1338,7 +1357,6 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
                             });
                         }
                     }
-                    layer1_distilled_any = true;
                     distill_out = Some(distill);
                 }
                 Err(err) => {
@@ -1370,20 +1388,30 @@ pub fn run_once_with_options(run_opts: WatchRunOptions) -> Result<WatchCycleOutc
         }
     }
 
-    if layer1_distilled_any {
+    // Run L2 synthesis once per residential day (first watcher cycle after midnight),
+    // targeting today's daily memory file only.
+    if last_syns_day_key.as_deref() != Some(current_day_key.as_str()) {
+        let syns_source_day_key =
+            previous_day_key_for_epoch_in_timezone(usage.captured_at_epoch_secs, residential_tz);
+        let mut syns_sources = vec![daily_memory_path_for_day_key(&paths, &syns_source_day_key)];
+        if paths.memory_file.exists() {
+            syns_sources.push(paths.memory_file.display().to_string());
+        }
         match run_wisdom_distillation(
             &paths,
             &WisdomDistillInput {
                 trigger: "watcher".to_string(),
                 day_epoch_secs: Some(usage.captured_at_epoch_secs),
-                source_paths: Vec::new(),
+                source_paths: syns_sources,
                 dry_run: false,
             },
         ) {
             Ok(wisdom) => {
+                state.last_syns_trigger_epoch_secs = Some(usage.captured_at_epoch_secs);
                 distill_out = Some(wisdom);
             }
             Err(err) => {
+                state.last_syns_trigger_epoch_secs = Some(usage.captured_at_epoch_secs);
                 warn::emit(WarnEvent {
                     code: "WISDOM_DISTILL_FAILED",
                     stage: "distill",

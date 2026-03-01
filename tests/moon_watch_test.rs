@@ -1,4 +1,5 @@
 #![cfg(not(windows))]
+use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use predicates::str::contains;
 use serde_json::Value;
 use std::fs;
@@ -710,6 +711,70 @@ fn moon_watch_once_distill_now_runs_in_manual_mode() {
     let distilled = read_distilled_archive_paths(&moon_home.join("moon/state/moon_state.json"));
     assert_eq!(distilled.len(), 1);
     assert!(distilled.contains(&archive_path.to_string_lossy().to_string()));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn moon_watch_once_runs_auto_syns_with_yesterday_and_memory_sources() {
+    let tmp = tempdir().expect("tempdir");
+    let moon_home = tmp.path().join("moon");
+    let sessions_dir = tmp.path().join("sessions");
+    fs::create_dir_all(moon_home.join("memory")).expect("mkdir memory");
+    fs::create_dir_all(moon_home.join("moon/logs")).expect("mkdir logs");
+    fs::create_dir_all(&sessions_dir).expect("mkdir sessions");
+    fs::write(
+        sessions_dir.join("s1.json"),
+        "{\"decision\":\"auto syns sources\"}\n",
+    )
+    .expect("write session");
+
+    let now_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("epoch")
+        .as_secs();
+    let now_utc = Utc
+        .timestamp_opt(now_epoch as i64, 0)
+        .single()
+        .expect("utc timestamp");
+    let yesterday = (now_utc.date_naive() - ChronoDuration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let yesterday_file = moon_home.join("memory").join(format!("{yesterday}.md"));
+    let memory_file = moon_home.join("MEMORY.md");
+    fs::write(
+        &yesterday_file,
+        "# Daily Memory\n<!-- moon_memory_format: conversation_v1 -->\n\n## Session y1\n**User:** Keep workflow simple.\n**Assistant:** Use one default path.\n",
+    )
+    .expect("write yesterday daily memory");
+    fs::write(
+        &memory_file,
+        "# MEMORY\n\n## Durable\n- Keep summaries concise.\n",
+    )
+    .expect("write memory file");
+
+    let qmd = tmp.path().join("qmd");
+    write_fake_qmd(&qmd);
+    let openclaw = tmp.path().join("openclaw");
+    write_fake_openclaw(&openclaw);
+
+    assert_cmd::cargo::cargo_bin_cmd!("moon")
+        .current_dir(tmp.path())
+        .env("MOON_HOME", &moon_home)
+        .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
+        .env("QMD_BIN", &qmd)
+        .env("OPENCLAW_BIN", &openclaw)
+        .env("MOON_DISTILL_MODE", "manual")
+        .env("MOON_RESIDENTIAL_TIMEZONE", "UTC")
+        .env("MOON_WISDOM_PROVIDER", "local")
+        .arg("moon-watch")
+        .arg("--once")
+        .assert()
+        .success();
+
+    let audit = fs::read_to_string(moon_home.join("moon/logs/audit.log")).expect("read audit");
+    assert!(audit.contains("mode=syns trigger=watcher"));
+    assert!(audit.contains(&yesterday_file.display().to_string()));
+    assert!(audit.contains(&memory_file.display().to_string()));
 }
 
 #[test]
