@@ -7,11 +7,11 @@ Before installation, you MUST define your workspace boundaries. Export these in 
 
 ```bash
 # The absolute path to your OpenClaw workspace
-export MOON_HOME="/Users/lilac/.lilac_metaflora"
+export MOON_HOME="$HOME/.openclaw_workspace"
 
 # Optional override for OpenClaw binary path.
 # If unset, moon resolves `openclaw` from PATH.
-export OPENCLAW_BIN="/Users/lilac/.nvm/versions/node/v24.13.0/bin/openclaw"
+export OPENCLAW_BIN="/absolute/path/to/openclaw"
 ```
 
 Validation:
@@ -39,7 +39,7 @@ The Watcher is the "brain" of the system. It handles archival, compaction, and d
 - **Start Daemon**: `moon moon-watch --daemon`
 - **Check Runtime Paths**: `moon moon-status`
 - **Check Daemon/State Health**: `moon moon-health`
-- **Audit Logs**: Monitor `~/.lilac_metaflora/moon/logs/audit.log` for activity.
+- **Audit Logs**: Monitor `$MOON_HOME/moon/logs/audit.log` for activity.
 - **Dry-run one cycle safely**: `moon moon-watch --once --dry-run`
 
 Workspace safety:
