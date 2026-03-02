@@ -62,8 +62,7 @@ fn plugin_assets_match_local(paths: &OpenClawPaths) -> bool {
 }
 
 fn parse_plugins_list_state(raw: &str, plugin_id: &str) -> PluginListState {
-    let parsed = serde_json::from_str::<Value>(raw);
-    let Ok(v) = parsed else {
+    let Some(v) = parse_json_value(raw) else {
         return PluginListState::default();
     };
 
@@ -100,6 +99,25 @@ fn parse_plugins_list_state(raw: &str, plugin_id: &str) -> PluginListState {
     }
 
     state
+}
+
+fn parse_json_value(raw: &str) -> Option<Value> {
+    if let Ok(value) = serde_json::from_str::<Value>(raw) {
+        return Some(value);
+    }
+
+    let object_start = raw.find('{');
+    let array_start = raw.find('[');
+    let start = match (object_start, array_start) {
+        (Some(obj), Some(arr)) => obj.min(arr),
+        (Some(obj), None) => obj,
+        (None, Some(arr)) => arr,
+        (None, None) => return None,
+    };
+
+    let candidate = &raw[start..];
+    let mut stream = serde_json::Deserializer::from_str(candidate).into_iter::<Value>();
+    stream.next().and_then(Result::ok)
 }
 
 fn parse_provenance_diagnostics(root: &Value, plugin_id: &str) -> Vec<String> {
@@ -155,4 +173,28 @@ fn is_provenance_warning_message(message: &str) -> bool {
         && (lowered.contains("untracked")
             || lowered.contains("install")
             || lowered.contains("load-path"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_plugins_list_state;
+
+    #[test]
+    fn parse_plugins_list_state_tolerates_preamble_before_json() {
+        let raw = r#"│
+◇ Doctor changes ──────────────────────────────────────────────╮
+│  Run "openclaw doctor --fix" to apply these changes.         │
+├───────────────────────────────────────────────────────────────╯
+{
+  "plugins": [
+    {"id":"moon","status":"loaded"}
+  ],
+  "diagnostics": []
+}"#;
+
+        let state = parse_plugins_list_state(raw, "moon");
+        assert!(state.listed);
+        assert!(state.loaded);
+        assert!(!state.provenance_warning_detected);
+    }
 }

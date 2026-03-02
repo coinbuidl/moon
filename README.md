@@ -329,6 +329,22 @@ Binary name: `moon`
 
 It is strongly recommended to install the binary to your `$PATH` using `cargo install --path .` rather than relying on `cargo run -- <command>` in production scenarios. You only need to run `cargo install --path .` again if you modify the Rust source code or plugin assets.
 
+### Binary Rebuild Guide
+
+Use this when you changed Rust code or plugin assets and want the installed `moon` binary to pick up changes.
+
+1. Rebuild and reinstall the binary.
+2. Re-apply plugin/runtime wiring.
+3. Verify strict health/provenance checks.
+4. Restart watcher daemon if it is running.
+
+```bash
+cargo install --path . --force
+moon install
+moon verify --strict
+moon restart
+```
+
 ```bash
 moon <command> [flags]
 ```
