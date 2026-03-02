@@ -96,6 +96,7 @@ Query semantics:
 1. Set `.env` (at minimum: ensure `openclaw` is on `PATH`; optional: set `OPENCLAW_BIN`; recommended: explicit path block below).
 2. Apply plugin install + provenance self-heal:
    `moon install` (or `cargo run -- install`)
+   - On macOS (installed binary), this also enables a `launchd` watcher service with auto-start + auto-restart.
 3. Validate environment and plugin wiring:
    `moon verify --strict` (or `cargo run -- verify --strict`)
 4. Check moon runtime paths:
@@ -106,7 +107,7 @@ Query semantics:
    `moon config --show` (or `cargo run -- config --show`)
 7. Run one watcher cycle:
    `moon watch --once` (or `cargo run -- watch --once`)
-8. Enable daemon mode only after one-shot run is clean.
+8. On macOS, `moon install` already wires daemon auto-start via `launchd`; use `moon restart` after config/binary updates.
 9. Install role-scoped skills (`moon-admin`, `moon-subagent`) if your runtime uses `$CODEX_HOME/skills`.
 
 ## Quick start
@@ -357,6 +358,8 @@ Global flag:
 Commands:
 
 1. `install [--force] [--dry-run] [--apply true|false]`
+   - macOS default behavior: writes/refreshes `~/Library/LaunchAgents/com.moon.watch.plist`, then bootstraps and kickstarts the watcher service.
+   - Safety guard: when running from development binaries (`target/debug` or `target/release`), autostart setup is skipped and a hint is printed.
 2. `verify [--strict]`
 3. `repair [--force]`
 4. `status`
@@ -414,8 +417,8 @@ If you upgraded from older builds, clean legacy macOS LaunchAgents to avoid
 duplicate daemons or stale `/tmp/moon*system*.log` logs:
 
 ```bash
-launchctl list | rg -i "moon.*system" || true
-ls "$HOME/Library/LaunchAgents" | rg -i "moon.*system" || true
+launchctl list | rg -i "moon|moon.*system" || true
+ls "$HOME/Library/LaunchAgents" | rg -i "com\\.moon\\.(watch|agent)|moon.*system" || true
 ```
 
 Archive and index latest session:
@@ -597,12 +600,20 @@ trash_path() {
   fi
 }
 
-# Stop known moon service names
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.moon.agent.plist 2>/dev/null || true
+# Stop/unload known moon service names
+LAUNCHD_DOMAIN="gui/$(id -u)"
+LAUNCHD_MOON_WATCH_LABEL="com.moon.watch"
+LAUNCHD_MOON_WATCH_PLIST="$HOME/Library/LaunchAgents/$LAUNCHD_MOON_WATCH_LABEL.plist"
+LAUNCHD_MOON_LEGACY_PLIST="$HOME/Library/LaunchAgents/com.moon.agent.plist"
+
+launchctl bootout "$LAUNCHD_DOMAIN/$LAUNCHD_MOON_WATCH_LABEL" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$LAUNCHD_MOON_WATCH_PLIST" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$LAUNCHD_MOON_LEGACY_PLIST" 2>/dev/null || true
 systemctl --user stop moon 2>/dev/null || true
 systemctl --user disable moon 2>/dev/null || true
 
-trash_path "$HOME/Library/LaunchAgents/com.moon.agent.plist"
+trash_path "$LAUNCHD_MOON_WATCH_PLIST"
+trash_path "$LAUNCHD_MOON_LEGACY_PLIST"
 trash_path "$HOME/.config/systemd/user/moon.service"
 systemctl --user daemon-reload 2>/dev/null || true
 
@@ -617,6 +628,7 @@ trash_path "$MOON_HOME/continuity"
 trash_path "$MOON_HOME/moon/state"
 trash_path "$MOON_HOME/state"                # legacy state location
 trash_path "$MOON_HOME/moon/logs"
+[ -n "${MOON_LOGS_DIR:-}" ] && trash_path "$MOON_LOGS_DIR"
 [ -n "${MOON_STATE_FILE:-}" ] && trash_path "$MOON_STATE_FILE"
 [ -n "${MOON_STATE_DIR:-}" ] && trash_path "$MOON_STATE_DIR"
 
