@@ -44,6 +44,9 @@ moon install
 On macOS, `moon install` registers and starts a `launchd` watcher service
 (`com.moon.watch`) with auto-restart enabled.
 
+On Windows/Linux, autostart is not wired by `moon install`; start daemon
+manually with:
+
 Manual foreground daemon start is still available when needed:
 
 ```bash
