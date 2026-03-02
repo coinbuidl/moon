@@ -3,7 +3,7 @@
 ## Start One Cycle
 
 ```bash
-moon moon-watch --once
+moon watch --once
 ```
 
 Bootstrap sequence (minimal setup):
@@ -12,10 +12,10 @@ Bootstrap sequence (minimal setup):
 cp .env.example .env
 cp moon.toml.example moon.toml
 moon verify --strict
-moon moon-status
-moon moon-health
+moon status
+moon health
 moon config --show
-moon moon-watch --once
+moon watch --once
 ```
 
 Distill trigger behavior:
@@ -37,13 +37,13 @@ Retention windows:
 ## Start Daemon
 
 ```bash
-moon moon-watch --daemon
+moon watch --daemon
 ```
 
 ## Health Probe
 
 ```bash
-moon moon-health
+moon health
 ```
 
 ## Manual Distill
@@ -84,25 +84,25 @@ When `-file` is provided, only the listed files participate. `memory.md` is incl
 Manual L1 queue trigger (same selection logic as watcher):
 
 ```bash
-moon moon-watch --once --distill-now
+moon watch --once
 ```
 
 Dry-run watcher cycle (no state/archive mutations):
 
 ```bash
-moon moon-watch --once --dry-run
+moon watch --once --dry-run
 ```
 
 ## Recall
 
 ```bash
-moon moon-recall --query "keyword" --name history
+moon recall --query "keyword" --name history
 ```
 
 Rebuild history index + normalize archive layout:
 
 ```bash
-moon moon-index --name history
+moon index --name history
 ```
 
 ## Key Paths

@@ -4,8 +4,8 @@ Use this skill for moon system admin/operator operations.
 For least-privilege sub-agents, use `SKILL_SUBAGENT.md` instead.
 
 This skill covers:
-1. Plugin lifecycle (`install`, `verify`, `repair`, `post-upgrade`).
-2. moon workflows (`moon-watch`, `moon-stop`, `moon-snapshot`, `moon-index`, `moon-embed`, `moon-recall`, `distill`).
+1. Plugin lifecycle (`install`, `verify`, `repair`).
+2. moon workflows (`watch`, `stop`, `restart`, `snapshot`, `index`, `embed`, `recall`, `distill`).
 
 ## Operating Rule
 
@@ -20,7 +20,7 @@ This skill covers:
 9. If `[context].compaction_authority = "moon"` is configured in `moon.toml`, enforce OpenClaw `agents.defaults.compaction.mode = "default"` (valid mode) and let moon drive earlier compaction via `[context]` ratios.
 10. On current OpenClaw versions, auto-compaction cannot be hard-disabled via config mode; treat moon as primary compaction orchestrator with OpenClaw fallback.
 11. If `moon status` reports `context policy drift`, fix with `moon install` (or `moon repair`) and re-check before continuing.
-12. Use `moon moon-embed` for manual embedding refresh (`--max-docs` bounded sprint runs). Manual runs trigger immediately and bypass watcher cooldown gates.
+12. Use `moon embed` for manual embedding refresh (`--max-docs` bounded sprint runs). Manual runs trigger immediately and bypass watcher cooldown gates.
 13. Watcher embed is always auto and runs after compaction/L1 stages and before daily `syns` when due. Gating is `[embed].cooldown_secs` + `[embed].min_pending_docs`; `[embed].idle_secs` is legacy compatibility only.
 14. Manual embed must not alter watcher cooldown timing; watcher cooldown continues from watcher-trigger timestamps only.
 15. Keep embed bounded-only. If QMD lacks `--max-docs`, watcher degrades and manual embed returns capability-missing (no unbounded fallback).

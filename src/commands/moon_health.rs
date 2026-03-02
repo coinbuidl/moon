@@ -92,7 +92,7 @@ fn check_state_file(paths: &crate::moon::paths::MoonPaths, report: &mut CommandR
 }
 
 pub fn run() -> Result<CommandReport> {
-    let mut report = CommandReport::new("moon-health");
+    let mut report = CommandReport::new("health");
     let paths = resolve_paths()?;
 
     report.detail(format!("moon_home={}", paths.moon_home.display()));

@@ -31,16 +31,16 @@ MOON requires a "provenance" registration with OpenClaw to authorize context pru
 ## 3. Dependency Check: qmd
 MOON uses `qmd` for vector indexing and recall.
 - Ensure `qmd` is installed and accessible.
-- Run `moon moon-status --json` to verify that `qmd_bin` is correctly detected.
+- Run `moon status --json` to verify that `qmd_bin` is correctly detected.
 
 ## 4. The Watcher Daemon
 The Watcher is the "brain" of the system. It handles archival, compaction, and distillation.
 
-- **Start Daemon**: `moon moon-watch --daemon`
-- **Check Runtime Paths**: `moon moon-status`
-- **Check Daemon/State Health**: `moon moon-health`
+- **Start Daemon**: `moon watch --daemon`
+- **Check Runtime Paths**: `moon status`
+- **Check Daemon/State Health**: `moon health`
 - **Audit Logs**: Monitor `$MOON_HOME/moon/logs/audit.log` for activity.
-- **Dry-run one cycle safely**: `moon moon-watch --once --dry-run`
+- **Dry-run one cycle safely**: `moon watch --once --dry-run`
 
 Workspace safety:
 
@@ -51,7 +51,7 @@ Workspace safety:
 If you have a massive existing session history (e.g., >10,000 chunks):
 - **Bounded only**: MOON requires bounded embed (`qmd embed --max-docs`) for verifiable progress.
 - **Auto watcher embed**: Keep `[embed].mode = "auto"` (legacy aliases normalize to `auto`). Watcher runs embed near cycle end with cooldown + pending-doc gates.
-- **Manual Sprints**: Use `moon moon-embed --max-docs 20` for controlled, verifiable progress.
+- **Manual Sprints**: Use `moon embed --max-docs 20` for controlled, verifiable progress.
 
 ## 6. Skill File Placement (Required)
 MOON ships two role-scoped skill guides in this repo root:

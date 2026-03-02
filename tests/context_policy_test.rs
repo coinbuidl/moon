@@ -97,7 +97,7 @@ fn install_applies_context_policy_and_status_reports_clean() {
         .env("OPENCLAW_CONFIG_PATH", &config_path)
         .env("OPENCLAW_BIN", &fake_openclaw)
         .env("MOON_CONFIG_PATH", &moon_config)
-        .arg("status")
+        .arg("verify")
         .assert()
         .success();
 }
@@ -153,7 +153,7 @@ fn status_fails_when_compaction_mode_drift_reenables_openclaw_authority() {
         .env("OPENCLAW_CONFIG_PATH", &config_path)
         .env("OPENCLAW_BIN", &fake_openclaw)
         .env("MOON_CONFIG_PATH", &moon_config)
-        .arg("status")
+        .arg("verify")
         .assert()
         .failure()
         .stdout(contains(

@@ -30,7 +30,7 @@ It optimizes the **OpenClaw** context window by minimizing token usage while ens
     *   **L2 Synthesis (`distill -mode syns`)**: model-driven synthesis that rewrites `memory.md` from selected source files.
     *   **Source control for synthesis**: default is `today + memory.md`; explicit `-file` inputs synthesize only those files.
 4.  **Embed Lifecycle Management**:
-    * Manual command: `moon moon-embed --name history --max-docs 25`
+    * Manual command: `moon embed --name history --max-docs 25`
     * Capability negotiation against installed QMD (`bounded` required; otherwise treated as missing/degraded)
     * Single-flight lock (`$MOON_LOGS_DIR/moon-embed.lock`) to avoid overlapping embed workers
     * Watcher embed runs automatically after compaction/L1 stages and before daily `syns`, then continues on cooldown-driven cycles
@@ -50,7 +50,7 @@ This modular architecture prevents the Agent from being overwhelmed by raw sessi
 Keep both skill source files in this repo root:
 
 1. `SKILL.md` for admin/operator tasks (`install`, `verify`, `repair`, watcher lifecycle).
-2. `SKILL_SUBAGENT.md` for least-privilege sub-agent tasks (`moon-recall`, `distill`, bounded `moon-embed`).
+2. `SKILL_SUBAGENT.md` for least-privilege sub-agent tasks (`recall`, `distill`, bounded `embed`).
 
 If your runtime expects installed skills at `$CODEX_HOME/skills/<name>/SKILL.md`,
 copy them as:
@@ -77,19 +77,19 @@ Add this block to your workspace `AGENTS.md` (adjust the repo path if different)
 ### moon Archive Recall Policy (Required)
 
 1. History search backend is QMD collection `history`, rooted at `$MOON_ARCHIVES_DIR`, mask `mlib/**/*.md` (archive projections in `$MOON_ARCHIVES_DIR/mlib/*.md`).
-2. Default history retrieval command is `moon moon-recall --name history --query "<user-intent-query>"`. (If running from source instead of a compiled binary, use `cargo run --manifest-path /path/to/moon/Cargo.toml -- moon-recall --name history --query "<user-intent-query>"`).
+2. Default history retrieval command is `moon recall --name history --query "<user-intent-query>"`. (If running from source instead of a compiled binary, use `cargo run --manifest-path /path/to/moon/Cargo.toml -- recall --name history --query "<user-intent-query>"`).
 3. Run history retrieval before answering when any condition is true: user references past sessions, pre-compaction context, prior decisions, or current-session context is insufficient.
 4. Retrieval procedure is strict: run one primary query, run one fallback query if no hits, and use top 3 hits only; include `archive_path` in reasoning when available.
 5. If finer detail is required, read the projection frontmatter field `archive_jsonl_path` and fetch only the minimal raw JSONL segment needed.
 6. If both primary and fallback queries return no relevant hit, explicitly reply `HISTORY_NOT_FOUND` (cannot find in archives).
-7. Never fabricate prior-session facts when `moon-recall` returns no relevant match.
+7. Never fabricate prior-session facts when `recall` returns no relevant match.
 ```
 
 Query semantics:
 
 1. Primary query: direct user intent in natural language.
 2. Fallback query: broader keywords from the same intent when primary has no relevant match.
-3. Top 3 hits: highest-score results returned by `moon-recall`.
+3. Top 3 hits: highest-score results returned by `recall`.
 
 ## Agent bootstrap checklist
 
@@ -99,13 +99,13 @@ Query semantics:
 3. Validate environment and plugin wiring:
    `moon verify --strict` (or `cargo run -- verify --strict`)
 4. Check moon runtime paths:
-   `moon moon-status` (or `cargo run -- moon-status`)
+   `moon status` (or `cargo run -- status`)
 5. Check daemon/state health:
-   `moon moon-health` (or `cargo run -- moon-health`)
+   `moon health` (or `cargo run -- health`)
 6. Inspect resolved runtime config:
    `moon config --show` (or `cargo run -- config --show`)
 7. Run one watcher cycle:
-   `moon moon-watch --once` (or `cargo run -- moon-watch --once`)
+   `moon watch --once` (or `cargo run -- watch --once`)
 8. Enable daemon mode only after one-shot run is clean.
 9. Install role-scoped skills (`moon-admin`, `moon-subagent`) if your runtime uses `$CODEX_HOME/skills`.
 
@@ -118,8 +118,8 @@ $EDITOR .env
 cargo install --path .
 moon install
 moon verify --strict
-moon moon-status
-moon moon-health
+moon status
+moon health
 moon config --show
 ```
 
@@ -150,7 +150,7 @@ non-distill/non-embed mode.
 Workspace boundary safety:
 
 1. Mutating commands validate CWD against the daemon-recorded workspace (or explicit `MOON_HOME` when no daemon lock is present).
-2. Diagnostic commands (`status`, `moon-status`, `moon-health`, `verify`, `config`) are always allowed from any directory.
+2. Diagnostic commands (`status`, `health`, `verify`, `config`) are always allowed from any directory.
 3. Escape hatch: pass global `--allow-out-of-bounds` to bypass CWD enforcement.
 
 OpenClaw binary resolution:
@@ -319,7 +319,7 @@ moon status
 moon install --dry-run
 moon install
 moon verify --strict
-moon moon-status
+moon status
 ```
 
 ## CLI
@@ -340,27 +340,24 @@ Global flag:
 Commands:
 
 1. `install [--force] [--dry-run] [--apply true|false]`
-2. `status`
-3. `verify [--strict]`
-4. `repair [--force]`
-5. `post-upgrade`
-6. `moon-status`
-7. `moon-snapshot [--source <path>] [--dry-run]`
-8. `moon-index [--name <collection>] [--dry-run] [--reproject]`
-   - `--reproject`: regenerate all projection markdown files using the v2 structured format
-9. `moon-watch [--once|--daemon] [--distill-now] [--dry-run]`
-10. `moon-stop`
-11. `moon-embed [--name <collection>] [--max-docs <N>] [--dry-run] [--watcher-trigger]`
-12. `moon-recall --query <text> [--name <collection>]`
-13. `distill -mode <norm|syns> [-archive <path>] [-session-id <id>] [-file <path> ...] [-dry-run]`
+2. `verify [--strict]`
+3. `repair [--force]`
+4. `status`
+5. `stop`
+6. `restart`
+7. `snapshot [--source <path>] [--dry-run]`
+8. `index [--name <collection>] [--dry-run]`
+9. `watch [--once|--daemon] [--dry-run]`
+10. `embed [--name <collection>] [--max-docs <N>] [--dry-run] [--watcher-trigger]`
+11. `recall --query <text> [--name <collection>]`
+12. `distill -mode <norm|syns> [-archive <path>] [-session-id <id>] [-file <path> ...] [-dry-run]`
     - `-mode norm` (default): L1 Normalisation for one projection file (`archives/mlib/*.md`) into daily memory
     - `-mode norm` requires explicit `-archive <path>` and that file must be pending in ledger/state; lock contention or no pending match returns an error
     - `-mode syns`: L2 Synthesis rewrites the whole `memory.md` from synthesis output
     - `-mode syns` default sources (manual CLI): today's daily memory + current `memory.md`
     - `-mode syns -file <path> ...`: distill only those files together; `memory.md` participates only if explicitly included as a `-file`
-    - `moon-distill` remains as a backward-compatible alias
-14. `config [--show]`
-15. `moon-health`
+13. `config [--show]`
+14. `health`
 
 Exit codes:
 
@@ -371,20 +368,20 @@ Exit codes:
 ## Provenance Behavior (Agent-critical)
 
 1. `moon install` always normalizes `plugins.installs.moon` (`source`, `sourcePath`, `installPath`) to the managed plugin directory.
-2. `moon status` and `moon verify --strict` treat OpenClaw runtime diagnostics from `openclaw plugins list --json` as the authoritative provenance signal.
-3. If runtime diagnostics report `loaded without install/load-path provenance`, `status`/`verify --strict` fail hard.
-4. If `plugins.installs.moon` is missing or path-mismatched but runtime diagnostics are clean, `status` prints a non-fatal `provenance repair hint`.
-5. First-time bootstrap and post-upgrade routine should always include `moon install` before `moon verify --strict`.
+2. `moon verify --strict` treats OpenClaw runtime diagnostics from `openclaw plugins list --json` as the authoritative provenance signal.
+3. If runtime diagnostics report `loaded without install/load-path provenance`, `verify --strict` fails hard.
+4. If `plugins.installs.moon` is missing or path-mismatched but runtime diagnostics are clean, `verify` prints a non-fatal `provenance repair hint`.
+5. First-time bootstrap and upgrade routine should always include `moon install` before `moon verify --strict`.
 
 ### Local Development & Testing
 If you are actively developing the moon codebase or writing an AI agent that needs to run tests:
 
-Running the background watcher daemon (`moon-watch --daemon`) via `cargo run` is explicitly blocked. This is a safety feature to prevent file-locking starvation and CPU spikes loop issues if the daemon restarts.
+Running the background watcher daemon (`watch --daemon`) via `cargo run` is explicitly blocked. This is a safety feature to prevent file-locking starvation and CPU spikes loop issues if the daemon restarts.
 
 To test the daemon with unreleased local changes, you must compile the binary first and execute it directly:
 ```bash
 cargo build
-./target/debug/moon moon-watch --daemon
+./target/debug/moon watch --daemon
 ```
 
 ## Common workflows
@@ -392,7 +389,8 @@ cargo build
 After OpenClaw upgrade:
 
 ```bash
-moon post-upgrade
+moon install
+moon verify --strict
 ```
 
 If you upgraded from older builds, clean legacy macOS LaunchAgents to avoid
@@ -406,51 +404,51 @@ ls "$HOME/Library/LaunchAgents" | rg -i "moon.*system" || true
 Archive and index latest session:
 
 ```bash
-moon moon-snapshot
-moon moon-index --name history
+moon snapshot
+moon index --name history
 ```
 
-`moon-index` also normalizes older archive layout into `archives/raw/` and backfills missing projection markdown files before running QMD sync.
+`index` also normalizes older archive layout into `archives/raw/` and backfills missing projection markdown files before running QMD sync.
 
 Run manual embed sprint:
 
 ```bash
-moon moon-embed --name history --max-docs 25
+moon embed --name history --max-docs 25
 ```
 
 Recall prior context:
 
 ```bash
-moon moon-recall --name history --query "your query"
+moon recall --name history --query "your query"
 ```
 
 Run one watcher cycle:
 
 ```bash
-moon moon-watch --once
+moon watch --once
 ```
 
 Dry-run watcher planning cycle (no mutation/state writes):
 
 ```bash
-moon moon-watch --once --dry-run
+moon watch --once --dry-run
 ```
 
 Stop the watcher daemon:
 
 ```bash
-moon moon-stop
+moon stop
 ```
 
 Health probe:
 
 ```bash
-moon moon-health
+moon health
 ```
 
 L1 auto trigger behavior:
 
-1. Watcher L1 path is auto: `moon-watch` checks L1 every cycle.
+1. Watcher L1 path is auto: `watch` checks L1 every cycle.
 2. Cooldown must pass (`watcher.cooldown_secs`).
 3. Pending source must exist in `archives/mlib/*.md` (projection markdown only).
 4. Selection is deterministic and bounded by `distill.max_per_cycle`.
@@ -461,7 +459,7 @@ Daily `syns` schedule:
 1. Watcher attempts `syns` once per residential day (`distill.residential_timezone`) on the first cycle after local midnight.
 2. Auto `syns` sources are yesterday's daily file (`memory/YYYY-MM-DD.md`) plus current `memory.md` (when present).
 3. Agents can run `moon distill -mode syns` directly at any time.
-4. `moon moon-watch --once --distill-now` remains a manual trigger for L1 queue processing.
+4. `moon watch --once` remains the manual trigger for one immediate L1 queue processing cycle.
 
 Retention lifecycle windows:
 
@@ -474,8 +472,8 @@ Embed lifecycle windows:
 1. Watcher embed is always auto (legacy `embed.mode` values normalize to `auto`).
 2. Watcher attempts embed after compaction/L1 stages and before daily `syns` when `syns` is due.
 3. Watcher execution is gated by `embed.cooldown_secs` and `embed.min_pending_docs`.
-4. Manual `moon-embed` runs immediately and bypasses watcher cooldown gating.
-5. Manual `moon-embed` does not reset the watcher cooldown clock.
+4. Manual `embed` runs immediately and bypasses watcher cooldown gating.
+5. Manual `embed` does not reset the watcher cooldown clock.
 6. QMD must support bounded embed (`--max-docs`); otherwise watcher degrades and manual embed returns capability-missing.
 7. `embed.idle_secs` is retained only for compatibility and does not gate watcher embed execution.
 8. Lock behavior is non-blocking: watcher embed skips current cycle when lock is busy; manual embed returns lock error (no wait queue).
@@ -522,7 +520,7 @@ Config hardening behaviors:
 
 1. Unknown `MOON_*` variables are warned on startup, with typo suggestions when close matches exist (allowlist is generated from source at build time).
 2. `moon config --show` prints fully resolved config values (defaults -> `moon.toml` -> env overrides).
-3. Secret env values are masked in diagnostics (`moon-status`, `config --show`).
+3. Secret env values are masked in diagnostics (`status`, `config --show`).
 
 Primary tuning belongs in `moon.toml`:
 

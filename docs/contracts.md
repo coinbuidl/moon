@@ -61,7 +61,7 @@ Rules:
 1. Watcher auto L1 runs only when cooldown passes and pending projection markdown exists in `archives/mlib/*.md`.
 2. L1 selection is deterministic and bounded by `max_per_cycle`.
 3. L1 lock is non-blocking and single-run; watcher lock contention degrades/skips current cycle.
-4. `moon-watch --once --distill-now` is a manual watcher trigger for the same L1 queue.
+4. `moon watch --once` is the manual watcher trigger for the same L1 queue.
 5. Manual L1 (`moon distill -mode norm -archive <path>`) requires explicit readable pending projection path and lock availability; lock/no-pending returns error.
 6. Auto L2 Synthesis (`syns`) runs once per residential day on the first watcher cycle after local midnight.
 7. Auto `syns` sources are yesterday's daily memory file plus current `memory.md` (when present).

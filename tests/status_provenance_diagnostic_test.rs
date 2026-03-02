@@ -71,7 +71,7 @@ fn status_fails_when_runtime_reports_untracked_provenance() {
         .env("OPENCLAW_STATE_DIR", &state_dir)
         .env("OPENCLAW_CONFIG_PATH", &config_path)
         .env("OPENCLAW_BIN", &fake_openclaw)
-        .arg("status")
+        .arg("verify")
         .assert()
         .failure()
         .stdout(contains(
@@ -120,7 +120,7 @@ fn status_tolerates_missing_install_record_when_diagnostics_are_clean() {
         .env("OPENCLAW_STATE_DIR", &state_dir)
         .env("OPENCLAW_CONFIG_PATH", &config_path)
         .env("OPENCLAW_BIN", &fake_openclaw)
-        .arg("status")
+        .arg("verify")
         .assert()
         .success()
         .stdout(contains("provenance repair hint"));

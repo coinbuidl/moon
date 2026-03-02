@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::commands::CommandReport;
+use crate::commands::moon_stop;
 use crate::moon::config::load_context_policy_if_explicit_env;
 use crate::openclaw::config::{
     ConfigPatchOptions, apply_config_patches, ensure_plugin_enabled, ensure_plugin_install_record,
@@ -19,6 +20,9 @@ pub struct InstallOptions {
 pub fn run(opts: &InstallOptions) -> Result<CommandReport> {
     let paths = resolve_paths()?;
     let mut report = CommandReport::new("install");
+
+    report.detail("preflight: stopping watcher daemon and clearing lock".to_string());
+    report.merge(moon_stop::run()?);
 
     let plugin = plugin_install::install_plugin(&paths, opts.dry_run)?;
     report.detail(format!("plugin_dir={}", plugin.path));

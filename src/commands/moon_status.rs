@@ -7,7 +7,7 @@ use crate::moon::state::state_file_path;
 
 pub fn run() -> Result<CommandReport> {
     let paths = resolve_paths()?;
-    let mut report = CommandReport::new("moon-status");
+    let mut report = CommandReport::new("status");
 
     report.detail(format!("moon_home={}", paths.moon_home.display()));
     report.detail(format!("archives_dir={}", paths.archives_dir.display()));

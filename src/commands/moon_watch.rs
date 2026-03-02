@@ -7,19 +7,14 @@ use crate::moon::watcher;
 pub struct MoonWatchOptions {
     pub once: bool,
     pub daemon: bool,
-    pub distill_now: bool,
     pub dry_run: bool,
 }
 
 pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
-    let mut report = CommandReport::new("moon-watch");
+    let mut report = CommandReport::new("watch");
 
     if opts.once && opts.daemon {
         report.issue("invalid flags: use only one of --once or --daemon");
-        return Ok(report);
-    }
-    if opts.daemon && opts.distill_now {
-        report.issue("invalid flags: --distill-now is only valid with --once");
         return Ok(report);
     }
     if opts.daemon && opts.dry_run {
@@ -43,9 +38,7 @@ pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
                 "Cargo run holds file locks and causes severe CPU/IO spikes when the daemon restarts.",
             );
             report.issue("Please install the binary to your path first: `cargo install --path .`");
-            report.issue(
-                "Then start the daemon using the compiled binary: `moon moon-watch --daemon`",
-            );
+            report.issue("Then start the daemon using the compiled binary: `moon watch --daemon`");
             return Ok(report);
         }
     }
@@ -56,9 +49,9 @@ pub fn run(opts: &MoonWatchOptions) -> Result<CommandReport> {
         return Ok(report);
     }
 
-    let cycle = if opts.distill_now || opts.dry_run {
+    let cycle = if opts.dry_run {
         watcher::run_once_with_options(watcher::WatchRunOptions {
-            force_distill_now: opts.distill_now,
+            force_distill_now: false,
             dry_run: opts.dry_run,
         })?
     } else {
