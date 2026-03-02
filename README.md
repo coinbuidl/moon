@@ -129,9 +129,10 @@ machine-specific values in `.env` and local `moon.toml` only.
 Workspace model (agent-facing):
 
 1. `MOON_HOME` is the workspace root for moon runtime data.
-2. Recommended default: `MOON_HOME=$HOME` (so home is the workspace root).
-3. Repo path should be `MOON_HOME/moon`.
-4. Daily memory path is `MOON_HOME/memory/YYYY-MM-DD.md`.
+2. When `MOON_HOME` is unset, moon defaults workspace root to `$HOME`.
+3. Recommended explicit setting: `MOON_HOME=$HOME` (so home is the workspace root).
+4. Repo path should be `MOON_HOME/moon`.
+5. Daily memory path is `MOON_HOME/memory/YYYY-MM-DD.md`.
 
 `.env` autoload precedence:
 

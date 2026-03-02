@@ -407,7 +407,7 @@ pub fn resolve_config_path() -> Option<PathBuf> {
     }
 
     let home = dirs::home_dir()?;
-    Some(home.join("moon").join("moon").join("moon.toml"))
+    Some(home.join("moon").join("moon.toml"))
 }
 
 fn merge_file_config(base: &mut MoonConfig) -> Result<()> {
