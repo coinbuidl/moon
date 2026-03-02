@@ -2218,9 +2218,9 @@ fn strip_projection_bullet_text(raw: &str) -> String {
     trimmed.to_string()
 }
 
-fn extract_layer1_from_projection_markdown(
-    projection_md: &str,
-) -> (Vec<(String, String)>, Option<Vec<String>>, usize, usize) {
+type Layer1ProjectionExtract = (Vec<(String, String)>, Option<Vec<String>>, usize, usize);
+
+fn extract_layer1_from_projection_markdown(projection_md: &str) -> Layer1ProjectionExtract {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Section {
         None,
@@ -3081,7 +3081,7 @@ fn build_wisdom_chunk_prompt(
 }
 
 fn truncate_text_to_bytes(text: &str, max_bytes: usize) -> String {
-    if text.as_bytes().len() <= max_bytes {
+    if text.len() <= max_bytes {
         return text.to_string();
     }
     if max_bytes == 0 {
@@ -3113,7 +3113,7 @@ fn split_text_by_max_bytes(text: &str, max_chunk_bytes: usize) -> Vec<String> {
     if max_chunk_bytes == 0 {
         return vec![truncate_text_to_bytes(text, WISDOM_MIN_DAILY_CHUNK_BYTES)];
     }
-    if text.as_bytes().len() <= max_chunk_bytes {
+    if text.len() <= max_chunk_bytes {
         return vec![text.to_string()];
     }
 
@@ -3123,7 +3123,7 @@ fn split_text_by_max_bytes(text: &str, max_chunk_bytes: usize) -> Vec<String> {
 
     for line in text.lines() {
         let line_with_nl = format!("{line}\n");
-        let line_bytes = line_with_nl.as_bytes().len();
+        let line_bytes = line_with_nl.len();
 
         if line_bytes > max_chunk_bytes {
             if !current.is_empty() {
@@ -3334,7 +3334,7 @@ fn generate_wisdom_summary(
         let bounded_current_memory = truncate_text_to_bytes(current_memory, bounded_current_budget);
 
         let daily_chunk_budget = context_budget_bytes
-            .saturating_sub(bounded_current_memory.as_bytes().len())
+            .saturating_sub(bounded_current_memory.len())
             .saturating_sub(WISDOM_PROMPT_OVERHEAD_BYTES)
             .max(WISDOM_MIN_DAILY_CHUNK_BYTES);
         let daily_chunks = split_text_by_max_bytes(daily_memory, daily_chunk_budget);
@@ -3351,14 +3351,10 @@ fn generate_wisdom_summary(
                 &bounded_current_memory,
             );
 
-            while prompt.as_bytes().len() > context_budget_bytes
-                && chunk_body.as_bytes().len() > WISDOM_MIN_DAILY_CHUNK_BYTES
+            while prompt.len() > context_budget_bytes
+                && chunk_body.len() > WISDOM_MIN_DAILY_CHUNK_BYTES
             {
-                let next_budget = chunk_body
-                    .as_bytes()
-                    .len()
-                    .saturating_mul(8)
-                    .saturating_div(10);
+                let next_budget = chunk_body.len().saturating_mul(8).saturating_div(10);
                 chunk_body = truncate_text_to_bytes(&chunk_body, next_budget);
                 prompt = build_wisdom_chunk_prompt(
                     day_key,
@@ -3369,7 +3365,7 @@ fn generate_wisdom_summary(
                 );
             }
 
-            if prompt.as_bytes().len() > context_budget_bytes {
+            if prompt.len() > context_budget_bytes {
                 continue;
             }
 
@@ -3403,12 +3399,12 @@ fn generate_wisdom_summary(
         let bounded_daily = truncate_text_to_bytes(
             daily_memory,
             context_budget_bytes
-                .saturating_sub(bounded_current_memory.as_bytes().len())
+                .saturating_sub(bounded_current_memory.len())
                 .saturating_sub(WISDOM_PROMPT_OVERHEAD_BYTES)
                 .max(WISDOM_MIN_DAILY_CHUNK_BYTES),
         );
         let prompt = build_wisdom_prompt(day_key, &bounded_daily, &bounded_current_memory);
-        if prompt.as_bytes().len() <= context_budget_bytes
+        if prompt.len() <= context_budget_bytes
             && let Ok(raw) = call_remote_prompt(&remote, &prompt)
         {
             let normalized = normalize_wisdom_summary(&raw, daily_memory, current_memory);
@@ -4246,7 +4242,7 @@ filtered_noise_count: 2
         let chunks = super::split_text_by_max_bytes(&text, max_bytes);
         assert!(chunks.len() > 1);
         for chunk in chunks {
-            assert!(chunk.as_bytes().len() <= max_bytes + 32);
+            assert!(chunk.len() <= max_bytes + 32);
         }
     }
 

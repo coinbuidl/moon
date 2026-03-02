@@ -26,10 +26,8 @@ pub fn load_dotenv() -> DotenvLoadOutcome {
     let Some(path) = fallback else {
         return DotenvLoadOutcome::Missing;
     };
-    if path.is_file() {
-        if dotenvy::from_path(&path).is_ok() {
-            return DotenvLoadOutcome::LoadedFallback(path);
-        }
+    if path.is_file() && dotenvy::from_path(&path).is_ok() {
+        return DotenvLoadOutcome::LoadedFallback(path);
     }
 
     DotenvLoadOutcome::Missing

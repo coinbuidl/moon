@@ -13,7 +13,6 @@ pub struct PluginVerifyOutcome {
     pub loaded_by_openclaw: bool,
     pub assets_match_local: bool,
     pub provenance_warning_detected: bool,
-    pub provenance_diagnostic_messages: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -46,7 +45,6 @@ pub fn verify_plugin(paths: &OpenClawPaths) -> Result<PluginVerifyOutcome> {
         loaded_by_openclaw: list_state.loaded,
         assets_match_local,
         provenance_warning_detected: list_state.provenance_warning_detected,
-        provenance_diagnostic_messages: list_state.provenance_diagnostic_messages,
     })
 }
 

@@ -1,9 +1,7 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::Command;
 
 const ARCHIVE_COLLECTION_MASK: &str = "mlib/**/*.md";
 
