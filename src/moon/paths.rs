@@ -29,12 +29,17 @@ fn env_or_default_path(var: &str, fallback: PathBuf) -> PathBuf {
     }
 }
 
+fn moon_home_from_inputs(home: PathBuf, moon_home_env: Option<&str>) -> (PathBuf, bool) {
+    match moon_home_env {
+        Some(v) if !v.trim().is_empty() => (PathBuf::from(v.trim()), true),
+        _ => (home, false),
+    }
+}
+
 pub fn resolve_paths() -> Result<MoonPaths> {
     let home = required_home_dir()?;
-    let (moon_home, is_explicit) = match env::var("MOON_HOME") {
-        Ok(v) if !v.trim().is_empty() => (PathBuf::from(v.trim()), true),
-        _ => (home.join("moon"), false),
-    };
+    let moon_home_env = env::var("MOON_HOME").ok();
+    let (moon_home, is_explicit) = moon_home_from_inputs(home.clone(), moon_home_env.as_deref());
 
     let archives_dir = env_or_default_path("MOON_ARCHIVES_DIR", moon_home.join("archives"));
     let memory_dir = env_or_default_path("MOON_MEMORY_DIR", moon_home.join("memory"));
@@ -58,4 +63,34 @@ pub fn resolve_paths() -> Result<MoonPaths> {
         qmd_db,
         moon_home_is_explicit: is_explicit,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::moon_home_from_inputs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn default_moon_home_uses_home_root_when_unset() {
+        let home = PathBuf::from("/home/alice");
+        let (moon_home, is_explicit) = moon_home_from_inputs(home.clone(), None);
+        assert_eq!(moon_home, home);
+        assert!(!is_explicit);
+    }
+
+    #[test]
+    fn explicit_moon_home_is_preserved() {
+        let (moon_home, is_explicit) =
+            moon_home_from_inputs(PathBuf::from("/home/alice"), Some("/workspace"));
+        assert_eq!(moon_home, PathBuf::from("/workspace"));
+        assert!(is_explicit);
+    }
+
+    #[test]
+    fn blank_moon_home_falls_back_to_home_root() {
+        let home = PathBuf::from("/home/alice");
+        let (moon_home, is_explicit) = moon_home_from_inputs(home.clone(), Some("   "));
+        assert_eq!(moon_home, home);
+        assert!(!is_explicit);
+    }
 }
