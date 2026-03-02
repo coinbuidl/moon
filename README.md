@@ -97,6 +97,7 @@ Query semantics:
 2. Apply plugin install + provenance self-heal:
    `moon install` (or `cargo run -- install`)
    - On macOS (installed binary), this also enables a `launchd` watcher service with auto-start + auto-restart.
+   - On Windows/Linux, autostart wiring is skipped; run `moon restart` (or `moon watch --daemon`) manually.
 3. Validate environment and plugin wiring:
    `moon verify --strict` (or `cargo run -- verify --strict`)
 4. Check moon runtime paths:
@@ -359,6 +360,7 @@ Commands:
 
 1. `install [--force] [--dry-run] [--apply true|false]`
    - macOS default behavior: writes/refreshes `~/Library/LaunchAgents/com.moon.watch.plist`, then bootstraps and kickstarts the watcher service.
+   - Windows/Linux behavior: service autostart wiring is not managed by `moon install` yet.
    - Safety guard: when running from development binaries (`target/debug` or `target/release`), autostart setup is skipped and a hint is printed.
 2. `verify [--strict]`
 3. `repair [--force]`
