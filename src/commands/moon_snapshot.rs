@@ -13,7 +13,7 @@ pub struct MoonSnapshotOptions {
 
 pub fn run(opts: &MoonSnapshotOptions) -> Result<CommandReport> {
     let paths = resolve_paths()?;
-    let mut report = CommandReport::new("moon-snapshot");
+    let mut report = CommandReport::new("snapshot");
 
     let source = match &opts.source {
         Some(path) => path.clone(),

@@ -187,7 +187,7 @@ fn moon_watch_once_uses_moon_state_file_override() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .arg("--json")
         .assert()
@@ -235,7 +235,7 @@ fn moon_watch_once_dry_run_skips_state_and_mutations() {
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .arg("--dry-run")
         .assert()
@@ -280,7 +280,7 @@ fn moon_watch_once_triggers_pipeline_with_low_thresholds() {
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
         .env("MOON_TRIGGER_RATIO", "0.00002")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -329,7 +329,7 @@ fn moon_watch_once_retries_embed_with_smaller_batch_after_timeout() {
         .env("MOON_TEST_QMD_LOG", &qmd_log)
         .env("MOON_EMBED_MAX_DOCS_PER_CYCLE", "4")
         .env("MOON_EMBED_MAX_CYCLE_SECS", "1")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -383,7 +383,7 @@ fn moon_watch_once_triggers_inbound_system_event_for_new_file() {
             "MOON_INBOUND_WATCH_PATHS",
             inbound_dir.to_string_lossy().to_string(),
         )
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -461,7 +461,7 @@ fn moon_watch_once_compacts_all_oversized_discord_and_whatsapp_sessions() {
         .env("MOON_TEST_COMPACT_LOG", &compact_log)
         .env("MOON_TRIGGER_RATIO", "0.85")
         .env("MOON_COOLDOWN_SECS", "0")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -546,7 +546,7 @@ fn moon_watch_once_distills_oldest_pending_archive_day_first() {
         .env("MOON_DISTILL_MAX_PER_CYCLE", "1")
         .env("MOON_COOLDOWN_SECS", "0")
         .env("MOON_RETENTION_COLD_DAYS", "99999")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -634,7 +634,7 @@ fn moon_watch_once_distill_selection_skips_unindexed_missing_and_already_distill
         .env("MOON_DISTILL_MAX_PER_CYCLE", "5")
         .env("MOON_COOLDOWN_SECS", "0")
         .env("MOON_RETENTION_COLD_DAYS", "99999")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -692,9 +692,8 @@ fn moon_watch_once_distill_now_runs_in_manual_mode() {
         .env("OPENCLAW_BIN", &openclaw)
         .env("MOON_DISTILL_PROVIDER", "local")
         .env("MOON_DISTILL_MAX_PER_CYCLE", "1")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
-        .arg("--distill-now")
         .assert()
         .success();
 
@@ -755,7 +754,7 @@ fn moon_watch_once_runs_auto_syns_with_yesterday_and_memory_sources() {
         .env("OPENCLAW_BIN", &openclaw)
         .env("MOON_RESIDENTIAL_TIMEZONE", "UTC")
         .env("MOON_WISDOM_PROVIDER", "local")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -819,7 +818,7 @@ fn moon_watch_l1_auto_path_distills_without_idle_mode_gating() {
         .env("MOON_DISTILL_MAX_PER_CYCLE", "1")
         .env("MOON_COOLDOWN_SECS", "0")
         .env("MOON_RETENTION_COLD_DAYS", "99999")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -860,7 +859,7 @@ fn moon_watch_once_emits_ai_warning_when_ledger_is_invalid() {
         .env("QMD_BIN", &qmd)
         .env("OPENCLAW_BIN", &openclaw)
         .env("MOON_COOLDOWN_SECS", "0")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success()
@@ -931,7 +930,7 @@ fn moon_watch_once_cleans_up_expired_distilled_archives_after_grace_period() {
             "MOON_TEST_CURRENT_JSON",
             r#"{"sessionId":"agent:main:main","usage":{"totalTokens":120},"limits":{"maxTokens":100000}}"#,
         )
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -1004,7 +1003,7 @@ fn moon_watch_once_retention_keeps_recent_cold_window_archives() {
         .env("MOON_RETENTION_ACTIVE_DAYS", "7")
         .env("MOON_RETENTION_WARM_DAYS", "30")
         .env("MOON_RETENTION_COLD_DAYS", "31")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -1068,7 +1067,7 @@ fn moon_watch_context_policy_bypasses_cooldown_on_emergency_ratio() {
         .env("MOON_TEST_SESSIONS_JSON", sessions_json)
         .env("MOON_TEST_COMPACT_LOG", &compact_log)
         .env("MOON_COOLDOWN_SECS", "3600")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--once")
         .assert()
         .success();
@@ -1117,7 +1116,7 @@ fn moon_watch_context_policy_retriggers_after_cooldown_when_above_trigger_ratio(
             .env("MOON_TEST_SESSIONS_JSON", sessions_json)
             .env("MOON_TEST_COMPACT_LOG", &compact_log)
             .env("MOON_COOLDOWN_SECS", "0")
-            .arg("moon-watch")
+            .arg("watch")
             .arg("--once")
             .assert()
             .success();

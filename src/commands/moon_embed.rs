@@ -19,7 +19,7 @@ pub fn run(opts: &MoonEmbedOptions) -> Result<CommandReport> {
     let paths = resolve_paths()?;
     let cfg = load_config()?;
     let mut state = state::load(&paths)?;
-    let mut report = CommandReport::new("moon-embed");
+    let mut report = CommandReport::new("embed");
 
     let caller = if opts.watcher_trigger {
         EmbedCaller::Watcher

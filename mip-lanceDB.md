@@ -30,12 +30,12 @@ LanceDB handles `memory/*.md` in-process. QMD continues to serve `archives/mlib/
 - **Metadata**: `file_path`, `date`, `checksum` (SHA-256 for skip-if-unchanged), `category`.
 
 ### Automated Sync
-- Extend `moon-watch` to monitor `memory/` directory.
+- Extend `moon watch` to monitor `memory/` directory.
 - Incremental re-indexing on file change (checksum-gated).
 - Periodic deep sweep every 24 hours.
 
 ### Recall Interface
-- `moon-recall --backend lancedb` alongside existing QMD recall.
+- `moon recall --backend lancedb` alongside existing QMD recall.
 - Merged results from both backends when querying across memory + archives.
 
 ## Pre-Requisites (Before Resuming)
@@ -45,7 +45,7 @@ LanceDB handles `memory/*.md` in-process. QMD continues to serve `archives/mlib/
 
 ## Resource Allocation
 - **Disk Space**: Unrestricted.
-- **Compute**: Background via `moon-watch` daemon.
+- **Compute**: Background via `moon watch` daemon.
 - **Provider**: Flexible — OpenAI (default), local embeddings (zero-cost alt).
 
 ---

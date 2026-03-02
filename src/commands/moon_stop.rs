@@ -90,7 +90,7 @@ fn cleanup_lock_file(lock_path: &Path, report: &mut CommandReport) {
 }
 
 pub fn run() -> Result<CommandReport> {
-    let mut report = CommandReport::new("moon-stop");
+    let mut report = CommandReport::new("stop");
     let lock_path = lock_path()?;
     report.detail(format!("daemon_lock={}", lock_path.display()));
 
@@ -124,7 +124,9 @@ pub fn run() -> Result<CommandReport> {
     }
 
     let command_line = process_command_line(pid)?;
-    if !command_line.contains("moon-watch --daemon") {
+    let matches_watcher_command =
+        command_line.contains("moon-watch --daemon") || command_line.contains(" watch --daemon");
+    if !matches_watcher_command {
         report.issue(format!(
             "refusing to stop pid {pid}; command does not match moon watcher daemon: {}",
             if command_line.is_empty() {
@@ -133,6 +135,7 @@ pub fn run() -> Result<CommandReport> {
                 command_line
             }
         ));
+        cleanup_lock_file(&lock_path, &mut report);
         return Ok(report);
     }
 

@@ -8,7 +8,7 @@ pub struct MoonConfigOptions {
 }
 
 pub fn run(opts: &MoonConfigOptions) -> Result<CommandReport> {
-    let mut report = CommandReport::new("moon-config");
+    let mut report = CommandReport::new("config");
     let cfg = load_config()?;
 
     if opts.show {

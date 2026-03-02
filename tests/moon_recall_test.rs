@@ -37,7 +37,7 @@ fn moon_recall_returns_matches() {
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("QMD_BIN", &qmd)
-        .arg("moon-recall")
+        .arg("recall")
         .args(["--query", "rule"])
         .assert()
         .success();
@@ -64,7 +64,7 @@ fn moon_recall_maps_qmd_file_uri_to_archive_path() {
         .current_dir(tmp.path())
         .env("MOON_HOME", &moon_home)
         .env("QMD_BIN", &qmd)
-        .arg("moon-recall")
+        .arg("recall")
         .args(["--query", "timeline"])
         .assert()
         .success();
@@ -109,7 +109,7 @@ fn moon_recall_prefers_exact_channel_archive_match() {
         .env("MOON_HOME", &moon_home)
         .env("QMD_BIN", &qmd)
         .arg("--json")
-        .arg("moon-recall")
+        .arg("recall")
         .args(["--query", "where is old info"])
         .args(["--channel-key", channel_key])
         .assert()

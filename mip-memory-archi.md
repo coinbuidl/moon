@@ -12,7 +12,7 @@ Establish a formal "Recency-First" weighting strategy for the M.O.O.N. memory sy
 ## 🏗️ The Multi-Tier Weighting Stack
 
 ### 1. Tier 0: The Active Context (Highest Weight)
-*   **Source**: Current OpenClaw session (`moon-watch` managed).
+*   **Source**: Current OpenClaw session (`moon watch` managed).
 *   **Window**: Fixed at **200,000 tokens** with a **0.50 (50%)** compaction ratio.
 *   **Weight**: 1.0 (Absolute Priority).
 *   **Role**: Real-time logic and immediate instruction flow.
@@ -25,7 +25,7 @@ Establish a formal "Recency-First" weighting strategy for the M.O.O.N. memory sy
 ### 3. Tier 2: Warm Recall (Recency-Biased Search)
 *   **Source**: LanceDB `history` collection (last 72 hours).
 *   **Weight**: 0.6.
-*   **Policy**: `moon-recall` should prioritize the top 3 hits from the most recent session projections (`archives/mlib/`).
+*   **Policy**: `moon recall` should prioritize the top 3 hits from the most recent session projections (`archives/mlib/`).
 *   **Implementation**: Agents must check the `projection_date` metadata before assuming a hit is the "current" truth.
 
 ### 4. Tier 3: Cold Recall (Long-Tail Retrieval)
@@ -37,8 +37,8 @@ Establish a formal "Recency-First" weighting strategy for the M.O.O.N. memory sy
 
 ## 🛠️ Implementation Requirements
 
-1.  **Metadata Tagging**: All `moon-index` projections must include a deterministic `ISO-8601` timestamp in the frontmatter.
-2.  **Recall Logic**: When calling `moon moon-recall`, the agent should append temporal hints (e.g., "recent decisions on X" vs "original design of X").
+1.  **Metadata Tagging**: All `moon index` projections must include a deterministic `ISO-8601` timestamp in the frontmatter.
+2.  **Recall Logic**: When calling `moon recall`, the agent should append temporal hints (e.g., "recent decisions on X" vs "original design of X").
 3.  **Librarian Boost**: Future `moon` updates should explore `order by timestamp desc` boosting in the LanceDB vector search query.
 
 ---

@@ -13,12 +13,12 @@ fn moon_stop_terminates_watcher_daemon_from_lock_pid() {
     fs::create_dir_all(&logs_dir).expect("mkdir logs");
     let lock_path = logs_dir.join("moon-watch.daemon.lock");
 
-    // Keep the process command line containing `moon-watch --daemon` so
-    // moon-stop can verify it is terminating the expected daemon.
+    // Keep the process command line containing `watch --daemon` so
+    // `stop` can verify it is terminating the expected daemon.
     let mut child = Command::new("sh")
         .arg("-c")
         .arg("while :; do sleep 1; done")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--daemon")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -31,7 +31,7 @@ fn moon_stop_terminates_watcher_daemon_from_lock_pid() {
     assert_cmd::cargo::cargo_bin_cmd!("moon")
         .current_dir(tmp.path())
         .env("MOON_LOGS_DIR", &logs_dir)
-        .arg("moon-stop")
+        .arg("stop")
         .assert()
         .success()
         .stdout(contains("stopped moon watcher daemon pid="));
@@ -62,7 +62,7 @@ fn moon_stop_terminates_watcher_daemon_from_json_lock_payload() {
     let mut child = Command::new("sh")
         .arg("-c")
         .arg("while :; do sleep 1; done")
-        .arg("moon-watch")
+        .arg("watch")
         .arg("--daemon")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -83,7 +83,7 @@ fn moon_stop_terminates_watcher_daemon_from_json_lock_payload() {
     assert_cmd::cargo::cargo_bin_cmd!("moon")
         .current_dir(tmp.path())
         .env("MOON_LOGS_DIR", &logs_dir)
-        .arg("moon-stop")
+        .arg("stop")
         .assert()
         .success()
         .stdout(contains("stopped moon watcher daemon pid="));
@@ -112,7 +112,7 @@ fn moon_stop_is_idempotent_when_lock_is_missing() {
     assert_cmd::cargo::cargo_bin_cmd!("moon")
         .current_dir(tmp.path())
         .env("MOON_LOGS_DIR", &logs_dir)
-        .arg("moon-stop")
+        .arg("stop")
         .assert()
         .success()
         .stdout(contains("already stopped"));

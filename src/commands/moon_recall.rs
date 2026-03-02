@@ -13,7 +13,7 @@ pub struct MoonRecallOptions {
 
 pub fn run(opts: &MoonRecallOptions) -> Result<CommandReport> {
     let paths = resolve_paths()?;
-    let mut report = CommandReport::new("moon-recall");
+    let mut report = CommandReport::new("recall");
 
     if opts.query.trim().is_empty() {
         report.issue("query cannot be empty");

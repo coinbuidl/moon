@@ -228,7 +228,7 @@ pub fn run_sessions_index_note(
             "source_path={}\n",
             "content_hash={}\n",
             "collection={}\n",
-            "lookup_hint=moon-recall --name {} --query \"{}\""
+            "lookup_hint=recall --name {} --query \"{}\""
         ),
         source_path.trim(),
         content_hash.trim(),

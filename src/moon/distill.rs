@@ -982,10 +982,10 @@ fn is_poll_heartbeat_noise(text: &str) -> bool {
 
 fn is_status_echo_noise(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
-    (lower.contains("command: moon-watch")
+    (lower.contains("command: moon-watch") || lower.contains("command: watch"))
         && lower.contains("moon watcher cycle completed")
         && lower.contains("heartbeat_epoch_secs=")
-        && lower.contains("poll_interval_secs="))
+        && lower.contains("poll_interval_secs=")
         || (lower.contains("threshold.trigger=")
             && lower.contains("distill.mode=")
             && lower.contains("retention.active_days="))

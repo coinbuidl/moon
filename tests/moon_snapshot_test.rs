@@ -15,7 +15,7 @@ fn moon_snapshot_copies_latest_session_file_to_archives() {
         .current_dir(tmp.path())
         .env("OPENCLAW_SESSIONS_DIR", &sessions_dir)
         .env("MOON_ARCHIVES_DIR", &archives_dir)
-        .arg("moon-snapshot")
+        .arg("snapshot")
         .assert()
         .success();
 

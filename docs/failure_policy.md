@@ -33,7 +33,7 @@
 5. `LEDGER_READ_FAILED`: verify `archives/ledger.jsonl` exists and contains valid JSONL records.
 6. `INDEX_NOTE_FAILED`: verify gateway `chat.send` permissions and session key validity.
 7. `PROJECTION_WRITE_FAILED`: verify archive read permissions and projection markdown write permissions.
-8. `DISTILL_SOURCE_MISSING`: verify archive projection markdown exists (`archives/mlib/*.md`) and rerun `moon-index --name history` to backfill.
+8. `DISTILL_SOURCE_MISSING`: verify archive projection markdown exists (`archives/mlib/*.md`) and rerun `moon index --name history` to backfill.
 9. `EMBED_FAILED`: verify `QMD_BIN`, `qmd embed` execution, and file permissions for lock/state paths.
 10. `EMBED_LOCKED`: another embed worker is active; retry next cycle or after current run ends.
 11. `EMBED_CAPABILITY_MISSING`: installed QMD build lacks bounded embed capability (`--max-docs`); upgrade QMD.

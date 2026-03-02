@@ -24,19 +24,18 @@ pub enum Command {
     Install(InstallArgs),
     Verify(VerifyArgs),
     Repair(RepairArgs),
-    PostUpgrade,
     Status,
-    MoonStatus,
-    MoonStop,
-    MoonSnapshot(MoonSnapshotArgs),
-    MoonIndex(MoonIndexArgs),
-    MoonWatch(MoonWatchArgs),
-    MoonEmbed(MoonEmbedArgs),
-    MoonRecall(MoonRecallArgs),
-    #[command(name = "distill", visible_alias = "moon-distill")]
+    Stop,
+    Restart,
+    Snapshot(MoonSnapshotArgs),
+    Index(MoonIndexArgs),
+    Watch(MoonWatchArgs),
+    Embed(MoonEmbedArgs),
+    Recall(MoonRecallArgs),
+    #[command(name = "distill")]
     Distill(DistillArgs),
     Config(ConfigArgs),
-    MoonHealth,
+    Health,
 }
 
 #[derive(Debug, Args)]
@@ -75,8 +74,6 @@ pub struct MoonIndexArgs {
     pub name: String,
     #[arg(long)]
     pub dry_run: bool,
-    #[arg(long)]
-    pub reproject: bool,
 }
 
 #[derive(Debug, Args, Default)]
@@ -85,8 +82,6 @@ pub struct MoonWatchArgs {
     pub once: bool,
     #[arg(long)]
     pub daemon: bool,
-    #[arg(long)]
-    pub distill_now: bool,
     #[arg(long)]
     pub dry_run: bool,
 }
@@ -191,11 +186,7 @@ pub fn run() -> Result<()> {
 
     // Every command validates CWD except diagnostics.
     match &cli.command {
-        Command::Status
-        | Command::MoonStatus
-        | Command::MoonHealth
-        | Command::Verify(_)
-        | Command::Config(_) => {
+        Command::Status | Command::Health | Command::Verify(_) | Command::Config(_) => {
             // Diagnostics are exempt from CWD enforcement.
         }
         _ => {
@@ -215,32 +206,29 @@ pub fn run() -> Result<()> {
         Command::Repair(args) => {
             commands::repair::run(&commands::repair::RepairOptions { force: args.force })?
         }
-        Command::PostUpgrade => commands::post_upgrade::run()?,
-        Command::Status => commands::status::run()?,
-        Command::MoonStatus => commands::moon_status::run()?,
-        Command::MoonStop => commands::moon_stop::run()?,
-        Command::MoonSnapshot(args) => {
+        Command::Status => commands::moon_status::run()?,
+        Command::Stop => commands::moon_stop::run()?,
+        Command::Restart => commands::moon_restart::run()?,
+        Command::Snapshot(args) => {
             commands::moon_snapshot::run(&commands::moon_snapshot::MoonSnapshotOptions {
                 source: args.source.clone(),
                 dry_run: args.dry_run,
             })?
         }
-        Command::MoonIndex(args) => {
+        Command::Index(args) => {
             commands::moon_index::run(&commands::moon_index::MoonIndexOptions {
                 collection_name: args.name.clone(),
                 dry_run: args.dry_run,
-                reproject: args.reproject,
             })?
         }
-        Command::MoonWatch(args) => {
+        Command::Watch(args) => {
             commands::moon_watch::run(&commands::moon_watch::MoonWatchOptions {
                 once: args.once,
                 daemon: args.daemon,
-                distill_now: args.distill_now,
                 dry_run: args.dry_run,
             })?
         }
-        Command::MoonEmbed(args) => {
+        Command::Embed(args) => {
             commands::moon_embed::run(&commands::moon_embed::MoonEmbedOptions {
                 collection_name: args.name.clone(),
                 max_docs: args.max_docs,
@@ -248,7 +236,7 @@ pub fn run() -> Result<()> {
                 watcher_trigger: args.watcher_trigger,
             })?
         }
-        Command::MoonRecall(args) => {
+        Command::Recall(args) => {
             commands::moon_recall::run(&commands::moon_recall::MoonRecallOptions {
                 query: args.query.clone(),
                 collection_name: args.name.clone(),
@@ -269,7 +257,7 @@ pub fn run() -> Result<()> {
                 show: args.show,
             })?
         }
-        Command::MoonHealth => commands::moon_health::run()?,
+        Command::Health => commands::moon_health::run()?,
     };
 
     print_report(&report, cli.json)?;
