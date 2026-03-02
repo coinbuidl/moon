@@ -10,7 +10,6 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{Instant, UNIX_EPOCH};
 use thiserror::Error;
 

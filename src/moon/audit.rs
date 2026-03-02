@@ -39,11 +39,11 @@ pub fn append_event(paths: &MoonPaths, phase: &str, status: &str, message: &str)
 }
 
 fn maybe_rotate_log(path: &Path) -> Result<()> {
-    if let Ok(meta) = fs::metadata(path) {
-        if meta.len() >= MAX_AUDIT_LOG_SIZE {
-            let backup = format!("{}.1", path.display());
-            let _ = fs::rename(path, backup);
-        }
+    if let Ok(meta) = fs::metadata(path)
+        && meta.len() >= MAX_AUDIT_LOG_SIZE
+    {
+        let backup = format!("{}.1", path.display());
+        let _ = fs::rename(path, backup);
     }
     Ok(())
 }

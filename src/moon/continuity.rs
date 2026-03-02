@@ -75,7 +75,7 @@ fn try_rollover() -> Result<String> {
             "openclaw session rollover failed: {}",
             String::from_utf8_lossy(&o.stderr).trim()
         ),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(err),
     }
 }
 
