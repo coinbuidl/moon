@@ -11,6 +11,7 @@ Bootstrap sequence (minimal setup):
 ```bash
 cp .env.example .env
 cp moon.toml.example moon.toml
+moon install
 moon verify --strict
 moon status
 moon health
@@ -35,6 +36,15 @@ Retention windows:
 2. Cold deletion requires a distill marker in state for that archive.
 
 ## Start Daemon
+
+```bash
+moon install
+```
+
+On macOS, `moon install` registers and starts a `launchd` watcher service
+(`com.moon.watch`) with auto-restart enabled.
+
+Manual foreground daemon start is still available when needed:
 
 ```bash
 moon watch --daemon

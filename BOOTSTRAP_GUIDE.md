@@ -24,7 +24,7 @@ command -v openclaw
 MOON requires a "provenance" registration with OpenClaw to authorize context pruning.
 
 1. **Build**: `cargo build --release`
-2. **Install**: `moon install` (This registers the plugin and sets up internal paths).
+2. **Install**: `moon install` (This registers the plugin, sets up internal paths, and on macOS enables `launchd` auto-start + auto-restart for the watcher daemon when run from an installed binary).
 3. **Verify**: `moon verify --strict` (Ensure all checks are GREEN).
 4. **Inspect config**: `moon config --show` (confirm resolved runtime values).
 
@@ -36,7 +36,8 @@ MOON uses `qmd` for vector indexing and recall.
 ## 4. The Watcher Daemon
 The Watcher is the "brain" of the system. It handles archival, compaction, and distillation.
 
-- **Start Daemon**: `moon watch --daemon`
+- **Default start (macOS)**: `moon install` (registers + starts `com.moon.watch`)
+- **Manual foreground start**: `moon watch --daemon`
 - **Check Runtime Paths**: `moon status`
 - **Check Daemon/State Health**: `moon health`
 - **Audit Logs**: Monitor `$MOON_HOME/moon/logs/audit.log` for activity.
